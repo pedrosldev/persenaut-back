@@ -11,14 +11,36 @@ const axios = require('axios');
 const https = require('https');
 const cors = require('cors');
 
+// const corsOptions = {
+//   origin: '*',
+//   methods: ['POST', 'GET', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type'],
+//   // credentials: true
+//   optionsSuccessStatus: 200
+// };
 const corsOptions = {
-  origin: 'https://www.persenaut.piterxus.com',
-  methods: ['POST', 'GET', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-  // credentials: true
-  optionsSuccessStatus: 200
-};
+  origin: function (origin, callback) {
+    // Convierte la variable de entorno en array
+    const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
 
+    // Permite solicitudes sin origen (como Postman) en desarrollo
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+
+    // Verifica si el origen está permitido
+    if (allowedOrigins.includes(origin)) {
+      // ★★ Importante: Devuelve el ORIGIN solicitado (no true) ★★
+      callback(null, origin);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type'],
+  optionsSuccessStatus: 204,
+  credentials: false
+};
 
 const app = express();
 app.use(cors(corsOptions));
