@@ -1,7 +1,7 @@
 if (process.env.NODE_ENV === 'development') {
-  require('./env.local');
+  require('dotenv').config({ path: '.env.local' });
 } else {
-  require('./env');
+  require('dotenv').config({ path: '.env' });
 }
 console.log(`Entorno: ${process.env.NODE_ENV || 'development (default)'}`);
 console.log(`API URL: ${process.env.OLLAMA_API || 'No configurada'}`);
