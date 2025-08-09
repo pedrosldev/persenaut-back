@@ -3,6 +3,7 @@ module.exports = {
         {
             name: 'persenaut-backend',           // Nombre del proceso PM2
             script: './app.js',               // Archivo de entrada de tu app
+            exec_mode: 'fork',             // Modo de ejecución (cluster o fork)
             instances: 1,                    // Número de instancias (1 para backend simple)
             autorestart: true,               // Reiniciar automáticamente si falla
             watch: false,                   // No vigilar archivos para reiniciar (evitar en producción)
