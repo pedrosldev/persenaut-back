@@ -9,7 +9,9 @@ const express = require('express');
 const axios = require('axios');
 const https = require('https');
 const cors = require('cors');
-
+const Groq = require('groq-sdk');
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configurada'}`);
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -112,6 +114,31 @@ app.post('/api/reto', async (req, res) => {
   } catch (err) {
     console.error('Error al llamar a Ollama:', err.message);
     res.status(500).json({ error: 'Error al generar el reto', details: err.message });
+  }
+});
+
+// app.post('/api/groq', async (req, res) => {
+//   // const { prompt } = req.body;
+//   try {
+//     const completion = await groq.chat.completions.create({
+//       messages: [{ role: 'user', content: "Explain the importance of fast language models" }],
+//       model: 'llama-3.3-70b-versatile',
+//     });
+//     res.json({ response: completion.choices[0]?.message?.content });
+//   } catch (error) {
+//     res.status(500).json({ error: error.message });
+//   }
+// });
+app.post('/api/groq', async (req, res) => {
+  const { prompt } = req.body;
+  try {
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: 'user', content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+    });
+    res.json({ response: completion.choices[0]?.message?.content });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
