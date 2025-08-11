@@ -15,17 +15,17 @@ console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configura
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Convierte la variable de entorno en array
+   
     const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
 
-    // Permite solicitudes sin origen (como Postman) en desarrollo
+    
     if (!origin && process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
 
-    // Verifica si el origen está permitido
+   
     if (allowedOrigins.includes(origin)) {
-      // ★★ Importante: Devuelve el ORIGIN solicitado (no true) ★★
+      
       callback(null, origin);
     } else {
       callback(new Error('Not allowed by CORS'));
@@ -44,24 +44,24 @@ app.use(express.json());
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 15,              // ★ Conexiones simultáneas (ajustado para tu VPS de 2 núcleos)
-  maxFreeSockets: 10,          // Conexiones en espera para reutilizar
-  keepAliveMsecs: 15000,       // Renovar conexiones cada 15s (Node.js 16+)
-  timeout: 30000,              // Cerrar conexiones inactivas después de 30s
-  scheduling: 'fifo'           // Política de cola (Node.js 16+)
+  maxSockets: 15,             
+  maxFreeSockets: 10,          
+  keepAliveMsecs: 15000,       
+  timeout: 30000,              
+  scheduling: 'fifo'           
 });
-// Middleware para manejar errores de CORS
+
 const retryRequest = async (config, attempt = 0) => {
   try {
     const response = await axios(config);
     return response;
   } catch (error) {
-    if (attempt < 2) { // Máximo 2 reintentos
+    if (attempt < 2) { 
       console.log(`Reintentando (${attempt + 1}/2)...`);
       await new Promise(res => setTimeout(res, 2000 * (attempt + 1)));
       return retryRequest(config, attempt + 1);
     }
-    throw error; // Lanza el error después de los reintentos
+    throw error; 
   }
 };
 
@@ -76,7 +76,7 @@ app.post('/api/reto', async (req, res) => {
 
 
   try {
-    // 3. Configuración de la petición con reintentos (¡MODIFICADO!)
+    
     const response = await retryRequest({
       method: 'post',
       url: process.env.OLLAMA_API,
@@ -106,7 +106,7 @@ app.post('/api/reto', async (req, res) => {
 
 
     if (response.data?.response) {
-      return res.json({ reto: response.data.response }); // ★ Única respuesta
+      return res.json({ reto: response.data.response }); 
     } else {
       throw new Error('Estructura de respuesta inesperada');
     }
@@ -117,18 +117,7 @@ app.post('/api/reto', async (req, res) => {
   }
 });
 
-// app.post('/api/groq', async (req, res) => {
-//   // const { prompt } = req.body;
-//   try {
-//     const completion = await groq.chat.completions.create({
-//       messages: [{ role: 'user', content: "Explain the importance of fast language models" }],
-//       model: 'llama-3.3-70b-versatile',
-//     });
-//     res.json({ response: completion.choices[0]?.message?.content });
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
+
 app.post('/api/groq', async (req, res) => {
   const { prompt } = req.body;
   try {
