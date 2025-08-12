@@ -12,6 +12,7 @@ const cors = require('cors');
 const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configurada'}`);
+const authRoutes = require('./routes/auth');
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -41,6 +42,7 @@ const app = express();
 app.use(cors(corsOptions));
 app.use(express.json());
 
+app.use('/api/auth', authRoutes);
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,
