@@ -64,11 +64,13 @@ const corsOptions = {
 };
 
 const app = express();
-app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
+app.use(cors(corsOptions));
+
 
 app.use('/api/auth', authRoutes);
-app.use(cookieParser());
+
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,

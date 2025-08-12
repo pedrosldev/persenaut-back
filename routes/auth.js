@@ -110,5 +110,20 @@ router.post('/logout', (req, res) => {
     }
 });
 
+router.get('/check-auth', async (req, res) => {
+    try {
+       
+        const token = req.cookies.token;
+        if (!token) return res.json({ isAuthenticated: false });
+
+        jwt.verify(token, process.env.JWT_SECRET, (err) => {
+            if (err) return res.json({ isAuthenticated: false });
+            res.json({ isAuthenticated: true });
+        });
+    } catch (err) {
+        res.json({ isAuthenticated: false });
+    }
+});
+
 
 module.exports = router;
