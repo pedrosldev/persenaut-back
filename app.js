@@ -13,29 +13,54 @@ const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configurada'}`);
 const authRoutes = require('./routes/auth');
+const cookieParser = require('cookie-parser');
 
-const corsOptions = {
-  origin: function (origin, callback) {
+
+// const corsOptions = {
+//   origin: function (origin, callback) {
    
-    const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
+//     const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
 
     
+//     if (!origin && process.env.NODE_ENV === 'development') {
+//       return callback(null, true);
+//     }
+
+   
+//     if (allowedOrigins.includes(origin)) {
+      
+//       callback(null, origin);
+//     } else {
+//       callback(new Error('Not allowed by CORS'));
+//     }
+//   },
+//   methods: ['GET', 'POST', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type'],
+//   optionsSuccessStatus: 204,
+//   credentials: false
+// };
+const corsOptions = {
+  origin: function (origin, callback) {
+
+    const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
+
+
     if (!origin && process.env.NODE_ENV === 'development') {
       return callback(null, true);
     }
 
-   
+
     if (allowedOrigins.includes(origin)) {
-      
+
       callback(null, origin);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204,
-  credentials: false
+  credentials: true
 };
 
 const app = express();
@@ -43,6 +68,7 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 app.use('/api/auth', authRoutes);
+app.use(cookieParser());
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,
