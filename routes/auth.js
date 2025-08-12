@@ -92,5 +92,23 @@ router.post('/login', async (req, res) => {
     }
 });
 
+// Logout (eliminar cookie)
+router.post('/logout', (req, res) => {
+    try {
+        // Destruir la cookie 'token'
+        res.clearCookie('token', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'strict',
+            path: '/',
+        });
+
+        res.json({ message: 'Sesión cerrada correctamente' });
+    } catch (err) {
+        console.error('Error en logout:', err);
+        res.status(500).json({ error: 'Error en el servidor' });
+    }
+});
+
 
 module.exports = router;
