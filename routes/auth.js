@@ -8,20 +8,20 @@ const router = express.Router();
 
 // Registro
 router.post('/register', async (req, res) => {
-    const { name, email, password } = req.body;
+    const { name, username, email, password } = req.body;
 
-    if (!name || !email || !password)
+    if (!name || !username || !email || !password)
         return res.status(400).json({ error: 'Todos los campos son obligatorios' });
 
     try {
-        const [rows] = await pool.query('SELECT id FROM users WHERE email = ?', [email]);
+        const [rows] = await pool.query('SELECT id FROM users WHERE email = ? OR username = ?', [email, username]);
         if (rows.length > 0)
-            return res.status(400).json({ error: 'El email ya está registrado' });
+            return res.status(400).json({ error: 'El email o el nombre de usuario ya están registrados' });
 
         const passwordHash = await bcrypt.hash(password, 10);
         await pool.query(
-            'INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)',
-            [name, email, passwordHash]
+            'INSERT INTO users (name, username, email, password_hash) VALUES (?, ?, ?, ?)',
+            [name, username, email, passwordHash]
         );
 
         res.json({ message: 'Usuario registrado correctamente' });
@@ -71,7 +71,7 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Credenciales inválidas' });
 
         const token = jwt.sign(
-            { id: user.id, name: user.name },
+            { id: user.id, name: user.name, username: user.username },
             process.env.JWT_SECRET,
             { expiresIn: '1h' }
         );
@@ -118,7 +118,7 @@ router.get('/check-auth', async (req, res) => {
 
         jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
             if (err) return res.json({ isAuthenticated: false });
-            res.json({ isAuthenticated: true, user: { id: decoded.id, name: decoded.name } });
+            res.json({ isAuthenticated: true, user: { id: decoded.id, name: decoded.name, username: decoded.username } });
         });
     } catch (err) {
         res.json({ isAuthenticated: false });
