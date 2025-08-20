@@ -16,29 +16,7 @@ const authRoutes = require('./routes/auth');
 const cookieParser = require('cookie-parser');
 
 
-// const corsOptions = {
-//   origin: function (origin, callback) {
-   
-//     const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
 
-    
-//     if (!origin && process.env.NODE_ENV === 'development') {
-//       return callback(null, true);
-//     }
-
-   
-//     if (allowedOrigins.includes(origin)) {
-      
-//       callback(null, origin);
-//     } else {
-//       callback(new Error('Not allowed by CORS'));
-//     }
-//   },
-//   methods: ['GET', 'POST', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type'],
-//   optionsSuccessStatus: 204,
-//   credentials: false
-// };
 const corsOptions = {
   origin: function (origin, callback) {
 
@@ -74,11 +52,11 @@ app.use('/api/auth', authRoutes);
 
 const keepAliveAgent = new https.Agent({
   keepAlive: true,
-  maxSockets: 15,             
-  maxFreeSockets: 10,          
-  keepAliveMsecs: 15000,       
-  timeout: 30000,              
-  scheduling: 'fifo'           
+  maxSockets: 15,
+  maxFreeSockets: 10,
+  keepAliveMsecs: 15000,
+  timeout: 30000,
+  scheduling: 'fifo'
 });
 
 const retryRequest = async (config, attempt = 0) => {
@@ -86,12 +64,12 @@ const retryRequest = async (config, attempt = 0) => {
     const response = await axios(config);
     return response;
   } catch (error) {
-    if (attempt < 2) { 
+    if (attempt < 2) {
       console.log(`Reintentando (${attempt + 1}/2)...`);
       await new Promise(res => setTimeout(res, 2000 * (attempt + 1)));
       return retryRequest(config, attempt + 1);
     }
-    throw error; 
+    throw error;
   }
 };
 
@@ -106,7 +84,7 @@ app.post('/api/reto', async (req, res) => {
 
 
   try {
-    
+
     const response = await retryRequest({
       method: 'post',
       url: process.env.OLLAMA_API,
@@ -136,7 +114,7 @@ app.post('/api/reto', async (req, res) => {
 
 
     if (response.data?.response) {
-      return res.json({ reto: response.data.response }); 
+      return res.json({ reto: response.data.response });
     } else {
       throw new Error('Estructura de respuesta inesperada');
     }
