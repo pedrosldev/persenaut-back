@@ -14,7 +14,7 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configurada'}`);
 const authRoutes = require('./routes/auth');
 const cookieParser = require('cookie-parser');
-
+const pool = require('./config/db');
 
 
 const corsOptions = {
@@ -136,6 +136,80 @@ app.post('/api/groq', async (req, res) => {
     res.json({ response: completion.choices[0]?.message?.content });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// app.js - Endpoint para guardar preguntas
+app.post('/api/save-question', async (req, res) => {
+  const { theme, level, question, options, correctAnswer, rawResponse } = req.body;
+
+  console.log('Datos recibidos para guardar:', {
+    theme,
+    level,
+    question: question ? question.substring(0, 50) + '...' : null,
+    optionsCount: options ? options.length : 0,
+    correctAnswer
+  });
+
+  // Validación de campos obligatorios
+  if (!theme || !level || !question || !options || !correctAnswer) {
+    return res.status(400).json({
+      error: 'Faltan campos obligatorios',
+      details: {
+        theme: !theme ? 'Falta tema' : 'OK',
+        level: !level ? 'Falta nivel' : 'OK',
+        question: !question ? 'Falta pregunta' : 'OK',
+        options: !options ? 'Falta opciones' : 'OK',
+        correctAnswer: !correctAnswer ? 'Falta respuesta correcta' : 'OK'
+      }
+    });
+  }
+
+  try {
+    // Obtener conexión del pool
+    const connection = await pool.getConnection();
+
+    // Insertar en la base de datos
+    const [result] = await connection.execute(
+      `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        theme,
+        level,
+        question,
+        JSON.stringify(options),
+        correctAnswer,
+        rawResponse || ''
+      ]
+    );
+
+    // Liberar la conexión
+    connection.release();
+
+    console.log('✅ Pregunta guardada con ID:', result.insertId);
+
+    res.json({
+      success: true,
+      message: 'Pregunta guardada correctamente',
+      id: result.insertId
+    });
+
+  } catch (error) {
+    console.error('❌ Error al guardar en la base de datos:', error);
+
+    // Verificar si es error de conexión
+    if (error.code === 'ECONNREFUSED') {
+      return res.status(500).json({
+        error: 'Error de conexión a la base de datos',
+        details: 'No se puede conectar al servidor MySQL'
+      });
+    }
+
+    res.status(500).json({
+      error: 'Error interno del servidor',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
