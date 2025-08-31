@@ -100,7 +100,7 @@ app.post('/api/reto', async (req, res) => {
           repeat_penalty: 1.1
         }
       },
-      timeout: 60000,
+      // timeout: 60000,
       headers: {
         'Content-Type': 'application/json',
         'Connection': 'keep-alive'
