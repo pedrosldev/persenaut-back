@@ -141,18 +141,22 @@ app.post('/api/groq', async (req, res) => {
 
 // app.js - Endpoint para guardar preguntas
 app.post('/api/save-question', async (req, res) => {
-  const { theme, level, question, options, correctAnswer, rawResponse } = req.body;
+  const { theme, level, question, options, correctAnswer, rawResponse, userId, deliveryTime = '09:00:00', frequency = 'daily', isActive = true   } = req.body;
 
   console.log('Datos recibidos para guardar:', {
     theme,
     level,
     question: question ? question.substring(0, 50) + '...' : null,
     optionsCount: options ? options.length : 0,
-    correctAnswer
+    correctAnswer,
+    userId,
+    deliveryTime,
+    frequency,
+    isActive
   });
 
   // Validación de campos obligatorios
-  if (!theme || !level || !question || !options || !correctAnswer) {
+  if (!theme || !level || !question || !options || !correctAnswer || !userId) {
     return res.status(400).json({
       error: 'Faltan campos obligatorios',
       details: {
@@ -171,15 +175,19 @@ app.post('/api/save-question', async (req, res) => {
 
     // Insertar en la base de datos
     const [result] = await connection.execute(
-      `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         theme,
         level,
         question,
         JSON.stringify(options),
         correctAnswer,
-        rawResponse || ''
+        rawResponse || '',
+        userId,
+        deliveryTime,
+        frequency,
+        isActive
       ]
     );
 
