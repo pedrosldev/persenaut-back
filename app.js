@@ -15,6 +15,7 @@ console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configura
 const authRoutes = require('./routes/auth');
 const cookieParser = require('cookie-parser');
 const pool = require('./config/db');
+const { generatePrompt, formatQuestion } = require("./services/promptService");
 
 
 const corsOptions = {
@@ -74,54 +75,141 @@ const retryRequest = async (config, attempt = 0) => {
 };
 
 
-app.post('/api/reto', async (req, res) => {
-  const { prompt } = req.body;
+// app.post('/api/reto', async (req, res) => {
+//   const { prompt } = req.body;
 
-  if (!prompt) {
-    return res.status(400).json({ error: 'Se requiere un prompt' });
+//   if (!prompt) {
+//     return res.status(400).json({ error: 'Se requiere un prompt' });
+//   }
+
+
+
+//   try {
+
+//     const response = await retryRequest({
+//       method: 'post',
+//       url: process.env.OLLAMA_API,
+//       data: {
+//         model: 'mistral',
+//         prompt: prompt,
+//         stream: false,
+//         num_threads: 1,
+//         num_ctx: 128,
+//         temperature: 0,
+//         options: {
+
+//           repeat_penalty: 1.1
+//         }
+//       },
+//       // timeout: 60000,
+//       headers: {
+//         'Content-Type': 'application/json',
+//         'Connection': 'keep-alive'
+//       },
+//       httpsAgent: keepAliveAgent,
+//       maxContentLength: Infinity,
+//       maxBodyLength: Infinity
+//     });
+
+//     console.log('Respuesta Ollama:', response.data);
+
+
+//     if (response.data?.response) {
+//       return res.json({ reto: response.data.response });
+//     } else {
+//       throw new Error('Estructura de respuesta inesperada');
+//     }
+
+//   } catch (err) {
+//     console.error('Error al llamar a Ollama:', err.message);
+//     res.status(500).json({ error: 'Error al generar el reto', details: err.message });
+//   }
+// });
+app.post("/api/reto", async (req, res) => {
+  const {
+    theme,
+    level,
+    previousQuestions = [],
+    userId,
+    preferences = {},
+  } = req.body;
+
+  if (!theme || !level) {
+    return res.status(400).json({ error: "Tema y nivel son requeridos" });
   }
 
-
-
   try {
+    // 1. Generar el prompt usando el servicio del backend
+    const prompt = generatePrompt(theme, level, previousQuestions);
 
-    const response = await retryRequest({
-      method: 'post',
+    // 2. Llamar a Ollama para generar el reto
+    const ollamaResponse = await retryRequest({
+      method: "post",
       url: process.env.OLLAMA_API,
       data: {
-        model: 'mistral',
+        model: "mistral",
         prompt: prompt,
         stream: false,
-        num_threads: 1,
-        num_ctx: 128,
-        temperature: 0,
-        options: {
-
-          repeat_penalty: 1.1
-        }
+        options: { repeat_penalty: 1.1 },
       },
-      // timeout: 60000,
-      headers: {
-        'Content-Type': 'application/json',
-        'Connection': 'keep-alive'
-      },
-      httpsAgent: keepAliveAgent,
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity
     });
 
-    console.log('Respuesta Ollama:', response.data);
-
-
-    if (response.data?.response) {
-      return res.json({ reto: response.data.response });
-    } else {
-      throw new Error('Estructura de respuesta inesperada');
+    if (!ollamaResponse.data?.response) {
+      throw new Error("Estructura de respuesta inesperada de Ollama");
     }
 
-  } catch (err) {
-    console.error('Error al llamar a Ollama:', err.message);
-    res.status(500).json({ error: 'Error al generar el reto', details: err.message });
+    const responseText = ollamaResponse.data.response;
+
+    // 3. Formatear la pregunta usando el servicio del backend
+    const formattedQuestion = formatQuestion(responseText);
+
+    // 4. Guardar en la base de datos (opcional, si quieres guardar inmediatamente)
+    if (userId) {
+      const connection = await pool.getConnection();
+      const [result] = await connection.execute(
+        `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          theme,
+          level,
+          formattedQuestion.questionText,
+          JSON.stringify(formattedQuestion.options),
+          formattedQuestion.correctAnswer,
+          responseText,
+          userId,
+          preferences.deliveryTime || "09:00:00",
+          preferences.frequency || "daily",
+          preferences.isActive !== undefined ? preferences.isActive : true,
+          
+        ]
+      );
+      connection.release();
+
+      // 5. Devolver respuesta completa
+      res.json({
+        success: true,
+        question: formattedQuestion,
+        rawResponse: responseText,
+        promptUsed: prompt,
+        savedQuestionId: result.insertId,
+        message: "Pregunta generada y guardada correctamente",
+      });
+    } else {
+      // Si no hay userId, solo devolver la pregunta generada
+      res.json({
+        success: true,
+        question: formattedQuestion,
+        rawResponse: responseText,
+        promptUsed: prompt,
+        message: "Pregunta generada correctamente",
+      });
+    }
+  } catch (error) {
+    console.error("Error en /api/generate-question:", error);
+    res.status(500).json({
+      error: "Error al generar la pregunta",
+      details: error.message,
+    });
   }
 });
 
