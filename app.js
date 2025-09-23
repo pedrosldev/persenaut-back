@@ -16,6 +16,7 @@ const authRoutes = require('./routes/auth');
 const cookieParser = require('cookie-parser');
 const pool = require('./config/db');
 const { generatePrompt, formatQuestion } = require("./services/promptService");
+const schedulerService = require("./services/schedulerService");
 
 
 const corsOptions = {
@@ -183,4 +184,5 @@ app.post('/api/groq', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);
+  schedulerService.start();
 });
