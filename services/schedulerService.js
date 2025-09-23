@@ -1,6 +1,6 @@
 // services/schedulerService.js
 const cron = require("node-cron");
-const pool = require("../config/database");
+const pool = require("../config/db.js");
 const axios = require("axios");
 
 class SchedulerService {
