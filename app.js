@@ -159,7 +159,14 @@ app.post("/api/reto", async (req, res) => {
 
 
 app.post('/api/groq', async (req, res) => {
-  const { prompt } = req.body;
+  // const { prompt } = req.body;
+    const {
+      theme,
+      level,
+      previousQuestions = [],
+    
+    } = req.body;
+    const prompt = generatePrompt(theme, level, previousQuestions);
   try {
     const completion = await groq.chat.completions.create({
       messages: [{ role: 'user', content: prompt }],
