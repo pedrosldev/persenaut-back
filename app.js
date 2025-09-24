@@ -124,7 +124,8 @@ app.post("/api/reto", async (req, res) => {
           userId,
           preferences.deliveryTime || "09:00:00",
           preferences.frequency || "daily",
-          preferences.isActive !== undefined ? preferences.isActive : true,
+          true,
+          // preferences.isActive !== undefined ? preferences.isActive : true,
           
         ]
       );

@@ -27,7 +27,7 @@ class SchedulerService {
 
       // Buscar retos programados PARA AHORA
       const [dueChallenges] = await connection.execute(
-        `SELECT user_id, theme, level, frequency, delivery_time 
+        `SELECT id, user_id, theme, level, frequency, delivery_time 
                  FROM questions 
                  WHERE next_delivery <= NOW() 
                  AND is_active = true`,
@@ -49,11 +49,11 @@ class SchedulerService {
   }
 
   async generateNewChallenge(challenge) {
-    const { user_id, theme, level, frequency, delivery_time } = challenge;
+    const { id, user_id, theme, level, frequency, delivery_time } = challenge;
 
     try {
       console.log(`🔄 Generando NUEVO reto para usuario ${user_id}`);
-
+      const connection = await pool.getConnection();
       // Usar tu endpoint existente
       const response = await axios.post(
         `http://localhost:${process.env.PORT || 3000}/api/reto`,
@@ -72,6 +72,15 @@ class SchedulerService {
 
       if (response.data.success) {
         console.log(`✅ NUEVO reto guardado: ${response.data.savedQuestionId}`);
+        await connection.execute(
+          `UPDATE questions SET is_active = false WHERE id = ?`,
+          [id]
+        );
+
+        await connection.commit();
+        console.log(
+          `🔴 Registro ${id} desactivado | ✅ Trigger manejará próxima programación`
+        );
       }
     } catch (error) {
       console.error(
