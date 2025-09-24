@@ -2,6 +2,7 @@
 const cron = require("node-cron");
 const pool = require("../config/db.js");
 const axios = require("axios");
+const emailService = require("./emailService.js");
 
 class SchedulerService {
   constructor() {
@@ -54,6 +55,16 @@ class SchedulerService {
     try {
       console.log(`🔄 Generando NUEVO reto para usuario ${user_id}`);
       const connection = await pool.getConnection();
+               const [userData] = await connection.execute(
+                 `SELECT email, username FROM users WHERE id = ?`,
+                 [user_id]
+               );
+
+               if (userData.length === 0) {
+                 throw new Error(`Usuario ${user_id} no encontrado`);
+               }
+
+               const user = userData[0];
       // Usar tu endpoint existente
       const response = await axios.post(
         `http://localhost:${process.env.PORT || 3000}/api/reto`,
@@ -76,7 +87,12 @@ class SchedulerService {
           `UPDATE questions SET is_active = false WHERE id = ?`,
           [id]
         );
-
+            await emailService.sendChallengeNotification(
+              user.email,
+              user.username || "Usuario",
+              theme,
+              level
+            );
         await connection.commit();
         console.log(
           `🔴 Registro ${id} desactivado | ✅ Trigger manejará próxima programación`
