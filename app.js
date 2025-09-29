@@ -70,6 +70,95 @@ const retryRequest = async (config, attempt = 0) => {
 
 
 
+// app.post("/api/reto", async (req, res) => {
+//   const {
+//     theme,
+//     level,
+//     previousQuestions = [],
+//     userId,
+//     preferences = {},
+//   } = req.body;
+
+//   if (!theme || !level) {
+//     return res.status(400).json({ error: "Tema y nivel son requeridos" });
+//   }
+
+//   try {
+//     // 1. Generar el prompt usando el servicio del backend
+//     const prompt = generatePrompt(theme, level, previousQuestions);
+
+//     // 2. Llamar a Ollama para generar el reto
+//     const ollamaResponse = await retryRequest({
+//       method: "post",
+//       url: process.env.OLLAMA_API,
+//       data: {
+//         model: "mistral",
+//         prompt: prompt,
+//         stream: false,
+//         options: { repeat_penalty: 1.1 },
+//       },
+//     });
+
+//     if (!ollamaResponse.data?.response) {
+//       throw new Error("Estructura de respuesta inesperada de Ollama");
+//     }
+
+//     const responseText = ollamaResponse.data.response;
+
+//     // 3. Formatear la pregunta usando el servicio del backend
+//     const formattedQuestion = formatQuestion(responseText);
+
+//     // 4. Guardar en la base de datos (opcional, si quieres guardar inmediatamente)
+//     if (userId) {
+//       const connection = await pool.getConnection();
+//       const [result] = await connection.execute(
+//         `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
+//                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+//         [
+//           theme,
+//           level,
+//           formattedQuestion.questionText,
+//           JSON.stringify(formattedQuestion.options),
+//           formattedQuestion.correctAnswer,
+//           responseText,
+//           userId,
+//           preferences.deliveryTime || "09:00:00",
+//           preferences.frequency || "daily",
+//           true,
+//           // preferences.isActive !== undefined ? preferences.isActive : true,
+          
+//         ]
+//       );
+//       connection.release();
+
+//       // 5. Devolver respuesta completa
+//       res.json({
+//         success: true,
+//         question: formattedQuestion,
+//         rawResponse: responseText,
+//         promptUsed: prompt,
+//         savedQuestionId: result.insertId,
+//         message: "Pregunta generada y guardada correctamente",
+//       });
+//     } else {
+//       // Si no hay userId, solo devolver la pregunta generada
+//       res.json({
+//         success: true,
+//         question: formattedQuestion,
+//         rawResponse: responseText,
+//         promptUsed: prompt,
+//         message: "Pregunta generada correctamente",
+//       });
+//     }
+//   } catch (error) {
+//     console.error("Error en /api/reto:", error);
+//     res.status(500).json({
+//       error: "Error al generar la pregunta",
+//       details: error.message,
+//     });
+//   }
+// });
+
 app.post("/api/reto", async (req, res) => {
   const {
     theme,
@@ -87,33 +176,29 @@ app.post("/api/reto", async (req, res) => {
     // 1. Generar el prompt usando el servicio del backend
     const prompt = generatePrompt(theme, level, previousQuestions);
 
-    // 2. Llamar a Ollama para generar el reto
-    const ollamaResponse = await retryRequest({
-      method: "post",
-      url: process.env.OLLAMA_API,
-      data: {
-        model: "mistral",
-        prompt: prompt,
-        stream: false,
-        options: { repeat_penalty: 1.1 },
-      },
+    // 2. Llamar a GROQ en lugar de Ollama
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "llama-3.3-70b-versatile", // o 'mixtral-8x7b-32768', 'gemma2-9b-it'
+      temperature: 0.3,
+      max_tokens: 500, // Limitar longitud para mayor velocidad
     });
 
-    if (!ollamaResponse.data?.response) {
-      throw new Error("Estructura de respuesta inesperada de Ollama");
-    }
+    const responseText = completion.choices[0]?.message?.content;
 
-    const responseText = ollamaResponse.data.response;
+    if (!responseText) {
+      throw new Error("Estructura de respuesta inesperada de Groq");
+    }
 
     // 3. Formatear la pregunta usando el servicio del backend
     const formattedQuestion = formatQuestion(responseText);
 
-    // 4. Guardar en la base de datos (opcional, si quieres guardar inmediatamente)
+    // 4. Guardar en la base de datos
     if (userId) {
       const connection = await pool.getConnection();
       const [result] = await connection.execute(
         `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           theme,
           level,
@@ -125,8 +210,6 @@ app.post("/api/reto", async (req, res) => {
           preferences.deliveryTime || "09:00:00",
           preferences.frequency || "daily",
           true,
-          // preferences.isActive !== undefined ? preferences.isActive : true,
-          
         ]
       );
       connection.release();
