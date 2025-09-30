@@ -263,7 +263,71 @@ app.post('/api/groq', async (req, res) => {
   }
 });
 
+/* notificaciones */
 
+// app.js - Nuevos endpoints
+app.post("/api/pending-challenges", async (req, res) => {
+  const { userId } = req.body;
+
+  try {
+    const connection = await pool.getConnection();
+    
+    const [challenges] = await connection.execute(
+      `SELECT id, theme, level, question, options, correct_answer, 
+              display_status, frequency, created_at
+       FROM questions 
+       WHERE user_id = ? 
+       AND display_status = 'pending'
+       AND is_active = false
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    connection.release();
+
+    res.json({
+      success: true,
+      challenges: challenges.map(challenge => ({
+        ...challenge,
+        options: JSON.parse(challenge.options)
+      }))
+    });
+
+  } catch (error) {
+    console.error("Error fetching pending challenges:", error);
+    res.status(500).json({
+      error: "Error al obtener retos pendientes",
+      details: error.message
+    });
+  }
+});
+
+app.post("/api/start-challenge", async (req, res) => {
+  const { challengeId } = req.body;
+
+  try {
+    const connection = await pool.getConnection();
+    
+    await connection.execute(
+      `UPDATE questions SET display_status = 'active' WHERE id = ?`,
+      [challengeId]
+    );
+
+    connection.release();
+
+    res.json({
+      success: true,
+      message: "Reto iniciado correctamente"
+    });
+
+  } catch (error) {
+    console.error("Error starting challenge:", error);
+    res.status(500).json({
+      error: "Error al iniciar el reto",
+      details: error.message
+    });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '127.0.0.1', () => {
