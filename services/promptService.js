@@ -29,7 +29,8 @@ REGLAS ABSOLUTAS:
 2. ¡Siempre incluye "Respuesta correcta:"!
 3. ¡Solo 4 opciones exactamente!
 4. ¡No añadas explicaciones adicionales!
-5. ¡Mantén el formato línea por línea!`;
+5. ¡Mantén el formato línea por línea!
+6. Genera SOLO UNA PREGUNTA.`;
 };
 
 const formatQuestion = (rawText) => {

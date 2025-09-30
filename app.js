@@ -179,7 +179,7 @@ app.post("/api/reto", async (req, res) => {
     // 2. Llamar a GROQ en lugar de Ollama
     const completion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: "llama-3.3-70b-versatile", // o 'mixtral-8x7b-32768', 'gemma2-9b-it'
+      model: "openai/gpt-oss-120b", // o 'mixtral-8x7b-32768', 'gemma2-9b-it'
       temperature: 0.3,
       max_tokens: 500, // Limitar longitud para mayor velocidad
     });
@@ -254,8 +254,8 @@ app.post('/api/groq', async (req, res) => {
     const prompt = generatePrompt(theme, level, previousQuestions);
   try {
     const completion = await groq.chat.completions.create({
-      messages: [{ role: 'user', content: prompt }],
-      model: 'llama-3.3-70b-versatile',
+      messages: [{ role: "user", content: prompt }],
+      model: "openai/gpt-oss-120b",
     });
     res.json({ response: completion.choices[0]?.message?.content });
   } catch (error) {
