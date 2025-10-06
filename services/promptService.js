@@ -110,4 +110,43 @@ const formatQuestion = (rawText) => {
   }
 };
 
-module.exports = { generatePrompt, formatQuestion };
+const generatePromptFromNotes = (notes, theme, level) => {
+  return `ERES UN EXPERTO EN CREAR EVALUACIONES EDUCATIVAS. ANALIZA LOS APUNTES PROPORCIONADOS Y GENERA UNA PREGUNTA DE TEST QUE EVALÚE LA COMPRENSIÓN DE CONCEPTOS CLAVE.
+
+TEMA: ${theme}
+NIVEL: ${level}
+
+APUNTES DEL USUARIO:
+"""
+${notes}
+"""
+
+INSTRUCCIONES ESPECÍFICAS:
+- Analiza los apuntes y genera EXCLUSIVAMENTE UNA PREGUNTA que evalúe un concepto importante presente en el texto
+- La pregunta debe ser desafiante y requerir comprensión, no solo memorización
+- Las opciones deben ser plausibles pero con solo UNA correcta
+- La respuesta correcta debe basarse directamente en la información de los apuntes
+
+FORMATO OBLIGATORIO (COPIA ESTA ESTRUCTURA):
+
+Pregunta: [Pregunta basada en el análisis de los apuntes]
+
+A) [Opción A]
+B) [Opción B] 
+C) [Opción C]
+D) [Opción D]
+
+Respuesta correcta: [Letra]
+
+REGLAS ABSOLUTAS:
+1. ¡Genera SOLO UNA PREGUNTA!
+2. ¡NUNCA omitas las opciones A-D!
+3. ¡Siempre incluye "Respuesta correcta:"!
+4. ¡Las opciones incorrectas deben ser verosímiles pero definitivamente erróneas!
+5. ¡No añadas explicaciones, análisis ni múltiples preguntas!
+6. ¡La pregunta debe basarse directamente en el contenido de los apuntes!`;
+};
+
+module.exports = { generatePrompt, generatePromptFromNotes, formatQuestion };
+
+

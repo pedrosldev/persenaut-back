@@ -15,7 +15,7 @@ console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configura
 const authRoutes = require('./routes/auth');
 const cookieParser = require('cookie-parser');
 const pool = require('./config/db');
-const { generatePrompt, formatQuestion } = require("./services/promptService");
+const { generatePrompt, generatePromptFromNotes, formatQuestion } = require("./services/promptService");
 const schedulerService = require("./services/schedulerService");
 
 
@@ -325,6 +325,77 @@ app.post("/api/start-challenge", async (req, res) => {
     res.status(500).json({
       error: "Error al iniciar el reto",
       details: error.message
+    });
+  }
+});
+app.post("/api/generate-from-notes", async (req, res) => {
+  const { userId, notes, theme, level, preferences = {} } = req.body;
+
+  try {
+    // 1. Generar el prompt especializado para apuntes
+    const prompt = generatePromptFromNotes(notes, theme, level);
+
+    // 2. Llamar a Groq
+    const completion = await groq.chat.completions.create({
+      messages: [{ role: "user", content: prompt }],
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.7,
+      max_tokens: 500,
+    });
+
+    const responseText = completion.choices[0]?.message?.content;
+
+    if (!responseText) {
+      throw new Error("No se recibió respuesta de Groq");
+    }
+
+    // 3. Formatear la pregunta
+    const formattedQuestion = formatQuestion(responseText);
+
+    // 4. Guardar en BD solo si hay userId (PATRÓN CONSISTENTE)
+    if (userId) {
+      const connection = await pool.getConnection();
+      const [result] = await connection.execute(
+        `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          theme,
+          level,
+          formattedQuestion.questionText,
+          JSON.stringify(formattedQuestion.options),
+          formattedQuestion.correctAnswer,
+          responseText,
+          userId,
+          preferences.deliveryTime || "09:00:00",
+          preferences.frequency || "once", // "once" en lugar de "daily" para apuntes
+          true,
+        ]
+      );
+      connection.release();
+
+      res.json({
+        success: true,
+        question: formattedQuestion,
+        rawResponse: responseText,
+        promptUsed: prompt,
+        savedQuestionId: result.insertId,
+        message: "Reto generado desde apuntes y guardado correctamente",
+      });
+    } else {
+      // Si no hay userId, solo devolver la pregunta generada
+      res.json({
+        success: true,
+        question: formattedQuestion,
+        rawResponse: responseText,
+        promptUsed: prompt,
+        message: "Reto generado desde apuntes correctamente",
+      });
+    }
+  } catch (error) {
+    console.error("Error en /api/generate-from-notes:", error);
+    res.status(500).json({
+      error: "Error al generar reto desde apuntes",
+      details: error.message,
     });
   }
 });
