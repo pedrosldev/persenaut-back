@@ -353,7 +353,7 @@ app.post("/api/generate-from-notes", async (req, res) => {
     const formattedQuestion = formatQuestion(responseText);
 
     // 4. Guardar en BD solo si hay userId (PATRÓN CONSISTENTE)
-    if (userId) {
+    if (userId && preferences.scheduleType === "scheduled") {
       const connection = await pool.getConnection();
       const [result] = await connection.execute(
         `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
