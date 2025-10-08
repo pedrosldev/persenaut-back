@@ -25,9 +25,12 @@ const corsOptions = {
     const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS.split(',');
 
 
-    if (!origin && process.env.NODE_ENV === 'development') {
-      return callback(null, true);
-    }
+    // if (!origin && process.env.NODE_ENV === 'development') {
+    //   return callback(null, true);
+    // }
+      if (!origin) {
+        return callback(null, true);
+      }
 
 
     if (allowedOrigins.includes(origin)) {
