@@ -13,6 +13,7 @@ const Groq = require('groq-sdk');
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada' : 'No configurada'}`);
 const authRoutes = require('./routes/auth');
+const intensiveReviewRoutes = require('./routes/intensiveReview');
 const cookieParser = require('cookie-parser');
 const pool = require('./config/db');
 const { generatePrompt, generatePromptFromNotes, formatQuestion } = require("./services/promptService");
@@ -53,6 +54,7 @@ app.use(cors(corsOptions));
 
 
 app.use('/api/auth', authRoutes);
+app.use('/api/intensive-review', intensiveReviewRoutes);
 
 
 
