@@ -372,7 +372,7 @@ app.post("/api/generate-from-notes", async (req, res) => {
           responseText,
           userId,
           preferences.deliveryTime || "09:00:00",
-          preferences.frequency || "once", // "once" en lugar de "daily" para apuntes
+          preferences.frequency,
           true,
         ]
       );
