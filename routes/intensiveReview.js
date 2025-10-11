@@ -2,6 +2,70 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
+const  {generatePrompt, formatQuestion}  = require("../services/promptService");
+const Groq = require('groq-sdk');
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+async function generateAutoChallengesDirect(userId, theme, count, connection) {
+  const generatedChallenges = [];
+
+  for (let i = 0; i < count; i++) {
+    try {
+      const prompt = generatePrompt(theme, "avanzado", []);
+
+      const completion = await groq.chat.completions.create({
+        messages: [{ role: "user", content: prompt }],
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      const responseText = completion.choices[0]?.message?.content;
+
+      if (responseText) {
+        const formattedQuestion = formatQuestion(responseText);
+
+        // INSERT sin ID (autoincremental) y con todos los campos requeridos
+        const [result] = await connection.execute(
+          `INSERT INTO questions 
+           (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, display_status, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            theme,
+            "avanzado", // nivel fijo
+            formattedQuestion.questionText,
+            JSON.stringify(formattedQuestion.options),
+            formattedQuestion.correctAnswer,
+            responseText,
+            userId, // el usuario logueado
+            "09:00:00", // delivery_time por defecto
+            "daily", // frequency por defecto
+            false, // is_active = false para no activar el trigger
+            "active", // display_status
+          ]
+        );
+
+        // Obtener el ID autogenerado
+        const insertedId = result.insertId;
+
+        generatedChallenges.push({
+          id: insertedId,
+          theme: theme,
+          question: formattedQuestion.questionText,
+          options: JSON.stringify(formattedQuestion.options), // ← Mantener como string para consistencia
+          correct_answer: formattedQuestion.correctAnswer,
+          level: "avanzado",
+        });
+
+        console.log(`✅ Reto auto-generado ID: ${insertedId}`);
+      }
+    } catch (error) {
+      console.error(`Error generando reto automático ${i + 1}:`, error);
+    }
+  }
+
+  return generatedChallenges;
+}
 
 
 router.post("/start", async (req, res) => {
@@ -13,19 +77,34 @@ router.post("/start", async (req, res) => {
 
     // Determinar límite de preguntas según el modo
     const challengeLimit = gameMode === "survival" ? 15 : 10; // Más preguntas para supervivencia
-
+      let challenges;
     // Obtener retos existentes del usuario
-    const [challenges] = await connection.execute(
+    const [existingChallenges] = await connection.execute(
       `SELECT id, theme, question, options, correct_answer 
        FROM questions 
        WHERE user_id = ? AND theme LIKE ? 
        ORDER BY RAND() LIMIT ?`,
       [userId, `%${theme}%`, challengeLimit]
     );
-
+    challenges = existingChallenges;
     if (challenges.length === 0) {
       connection.release();
       return res.status(404).json({ error: "No hay retos para este tema" });
+    }
+
+    if (challenges.length < challengeLimit) {
+      const needed = challengeLimit - challenges.length;
+      console.log(`🔄 Generando ${needed} retos automáticamente`);
+
+      const generatedChallenges = await generateAutoChallengesDirect(
+        userId,
+        theme,
+        needed,
+        connection
+      );
+
+      // Combinar retos existentes + nuevos generados
+      challenges = [...challenges, ...generatedChallenges];
     }
 
     // Guardar sesión CON MODO DE JUEGO
