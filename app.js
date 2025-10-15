@@ -18,6 +18,7 @@ const cookieParser = require('cookie-parser');
 const pool = require('./config/db');
 const { generatePrompt, generatePromptFromNotes, formatQuestion } = require("./services/promptService");
 const schedulerService = require("./services/schedulerService");
+const metricsRoutes = require("./routes/metrics");
 
 
 const corsOptions = {
@@ -55,7 +56,7 @@ app.use(cors(corsOptions));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/intensive-review', intensiveReviewRoutes);
-
+app.use("/api/metrics", metricsRoutes);
 
 
 

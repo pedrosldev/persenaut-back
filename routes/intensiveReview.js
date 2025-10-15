@@ -2,8 +2,9 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../config/db");
 const { v4: uuidv4 } = require("uuid");
-const  {generatePrompt, formatQuestion}  = require("../services/promptService");
-const Groq = require('groq-sdk');
+const { generatePrompt, formatQuestion } = require("../services/promptService");
+const ScoringService = require("../services/scoringService");
+const Groq = require("groq-sdk");
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 async function generateAutoChallengesDirect(userId, theme, count, connection) {
@@ -67,7 +68,6 @@ async function generateAutoChallengesDirect(userId, theme, count, connection) {
   return generatedChallenges;
 }
 
-
 router.post("/start", async (req, res) => {
   try {
     const { userId, theme, gameMode = "timed" } = req.body; // ← Nuevo parámetro
@@ -77,7 +77,7 @@ router.post("/start", async (req, res) => {
 
     // Determinar límite de preguntas según el modo
     const challengeLimit = gameMode === "survival" ? 15 : 10; // Más preguntas para supervivencia
-      let challenges;
+    let challenges;
     // Obtener retos existentes del usuario
     const [existingChallenges] = await connection.execute(
       `SELECT id, theme, question, options, correct_answer 
@@ -130,49 +130,132 @@ router.post("/start", async (req, res) => {
   }
 });
 
+// router.post("/save-results", async (req, res) => {
+//   try {
+//     const { sessionId, correctAnswers, incorrectAnswers, gameMode, timeUsed } =
+//       req.body;
+//     const connection = await pool.getConnection();
+
+//     // Actualizar sesión con tiempo usado si es modo ráfaga
+//     if (gameMode === "timed" && timeUsed !== undefined) {
+//       await connection.execute(
+//         `UPDATE intensive_sessions
+//          SET correct_answers = ?, time_used = ?, completed_at = NOW()
+//          WHERE id = ?`,
+//         [correctAnswers.length, timeUsed, sessionId]
+//       );
+//     } else {
+//       await connection.execute(
+//         `UPDATE intensive_sessions
+//          SET correct_answers = ?, completed_at = NOW()
+//          WHERE id = ?`,
+//         [correctAnswers.length, sessionId]
+//       );
+//     }
+
+//     // Guardar respuestas
+//     for (const challengeId of correctAnswers) {
+//       await connection.execute(
+//         `INSERT INTO session_challenges (session_id, challenge_id, correct)
+//          VALUES (?, ?, true)`,
+//         [sessionId, challengeId]
+//       );
+//     }
+
+//     for (const challengeId of incorrectAnswers) {
+//       await connection.execute(
+//         `INSERT INTO session_challenges (session_id, challenge_id, correct)
+//          VALUES (?, ?, false)`,
+//         [sessionId, challengeId]
+//       );
+//     }
+
+//     connection.release();
+//     res.json({ success: true });
+//   } catch (error) {
+//     console.error("Error saving results:", error);
+//     res.status(500).json({ error: "Error al guardar resultados" });
+//   }
+// });
 
 router.post("/save-results", async (req, res) => {
   try {
-    const { sessionId, correctAnswers, incorrectAnswers, gameMode, timeUsed } =
-      req.body;
+    const {
+      sessionId,
+      correctAnswers,
+      incorrectAnswers,
+      gameMode,
+      timeUsed = 0,
+      theme,
+    } = req.body;
+        console.log("🔍 DEBUG - Datos recibidos en save-results:", {
+          sessionId,
+          correctAnswersCount: correctAnswers?.length,
+          incorrectAnswersCount: incorrectAnswers?.length,
+          gameMode,
+          timeUsed,
+          theme,
+        });
     const connection = await pool.getConnection();
 
-    // Actualizar sesión con tiempo usado si es modo ráfaga
-    if (gameMode === "timed" && timeUsed !== undefined) {
-      await connection.execute(
-        `UPDATE intensive_sessions 
-         SET correct_answers = ?, time_used = ?, completed_at = NOW() 
-         WHERE id = ?`,
-        [correctAnswers.length, timeUsed, sessionId]
-      );
-    } else {
-      await connection.execute(
-        `UPDATE intensive_sessions 
-         SET correct_answers = ?, completed_at = NOW() 
-         WHERE id = ?`,
-        [correctAnswers.length, sessionId]
-      );
+    // 1. Obtener user_id de la sesión
+    const [sessionData] = await connection.execute(
+      `SELECT user_id FROM intensive_sessions WHERE id = ?`,
+      [sessionId]
+    );
+
+    if (sessionData.length === 0) {
+      connection.release();
+      return res.status(404).json({ error: "Sesión no encontrada" });
     }
 
-    // Guardar respuestas
-    for (const challengeId of correctAnswers) {
-      await connection.execute(
-        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
-         VALUES (?, ?, true)`,
-        [sessionId, challengeId]
-      );
-    }
+    const userId = sessionData[0].user_id;
 
-    for (const challengeId of incorrectAnswers) {
-      await connection.execute(
-        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
-         VALUES (?, ?, false)`,
-        [sessionId, challengeId]
-      );
-    }
+    // 2. Calcular métricas
+    const totalQuestions = correctAnswers.length + incorrectAnswers.length;
+    const accuracy =
+      totalQuestions > 0 ? (correctAnswers.length / totalQuestions) * 100 : 0;
+
+    const sessionResults = {
+      correctAnswers: correctAnswers.length,
+      totalQuestions: correctAnswers.length + incorrectAnswers.length,
+      accuracy:
+        totalQuestions > 0 ? (correctAnswers.length / totalQuestions) * 100 : 0,
+      timeUsed: timeUsed || 0, // ← Asegurar que no sea undefined
+      gameMode: gameMode || "unknown", // ← Asegurar que no sea undefined
+      theme: theme || "Sin tema", // ← Asegurar que no sea undefined
+    };
+
+    // 3. Calcular puntos
+    const points = ScoringService.calculatePoints(sessionResults);
+
+    // 4. Guardar en base de datos (tu código existente + nuevo)
+    await connection.execute(
+      `UPDATE intensive_sessions 
+       SET correct_answers = ?, time_used = ?, completed_at = NOW() 
+       WHERE id = ?`,
+      [correctAnswers.length, timeUsed, sessionId]
+    );
+
+    // Guardar respuestas individuales...
+    // (tu código existente para session_challenges)
+
+    // 5. ✅ NUEVO: Guardar métricas usando el servicio
+    await ScoringService.saveSessionScore(
+      userId,
+      sessionId,
+      sessionResults,
+      points
+    );
+    await ScoringService.updateUserMetrics(userId, sessionResults, points);
 
     connection.release();
-    res.json({ success: true });
+
+    res.json({
+      success: true,
+      points: points,
+      accuracy: accuracy,
+    });
   } catch (error) {
     console.error("Error saving results:", error);
     res.status(500).json({ error: "Error al guardar resultados" });
@@ -196,7 +279,6 @@ router.get("/user-themes/:userId", async (req, res) => {
     res.status(500).json({ error: "Error al obtener temas" });
   }
 });
-
 
 router.post("/continue-survival", async (req, res) => {
   try {
