@@ -1,5 +1,6 @@
 // services/scoringService.js - Versión corregida
 const pool = require("../config/db");
+const AchievementService = require("./achievementService");
 
 const ScoringService = {
   calculatePoints: (sessionResults) => {
@@ -18,15 +19,15 @@ const ScoringService = {
 
     try {
       // Asegurar que ningún valor sea undefined
-         console.log("🔎 DEBUG scoringService - Valores recibidos:", {
-           userId,
-           sessionId,
-           points,
-           accuracy: sessionResults.accuracy,
-           timeUsed: sessionResults.timeUsed,
-           gameMode: sessionResults.gameMode,
-           theme: sessionResults.theme,
-         });
+      console.log("🔎 DEBUG scoringService - Valores recibidos:", {
+        userId,
+        sessionId,
+        points,
+        accuracy: sessionResults.accuracy,
+        timeUsed: sessionResults.timeUsed,
+        gameMode: sessionResults.gameMode,
+        theme: sessionResults.theme,
+      });
       const safeValues = [
         userId,
         sessionId,
@@ -48,26 +49,30 @@ const ScoringService = {
     }
   },
 
-  updateUserMetrics: async (userId, sessionResults, points) => {
-    const connection = await pool.getConnection();
-
+  updateUserMetrics: async (userId, sessionResults, points, connection) => {
     try {
-      // Valores seguros para evitar undefined
       const safePoints = points || 0;
       const safeCorrectAnswers = sessionResults.correctAnswers || 0;
       const safeTimeUsed = sessionResults.timeUsed || 0;
       const safeAccuracy = sessionResults.accuracy || 0;
 
+      console.log("📈 DEBUG - Actualizando user_metrics con:", {
+        points: safePoints,
+        correctAnswers: safeCorrectAnswers,
+        timeUsed: safeTimeUsed,
+        accuracy: safeAccuracy,
+      });
+
       await connection.execute(
         `INSERT INTO user_metrics 
-         (user_id, total_points, total_sessions, total_correct_answers, total_time_spent, average_accuracy) 
-         VALUES (?, ?, 1, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-         total_points = total_points + ?,
-         total_sessions = total_sessions + 1,
-         total_correct_answers = total_correct_answers + ?,
-         total_time_spent = total_time_spent + ?,
-         average_accuracy = (average_accuracy * total_sessions + ?) / (total_sessions + 1)`,
+       (user_id, total_points, total_sessions, total_correct_answers, total_time_spent, average_accuracy) 
+       VALUES (?, ?, 1, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+       total_points = total_points + ?,
+       total_sessions = total_sessions + 1,
+       total_correct_answers = total_correct_answers + ?,
+       total_time_spent = total_time_spent + ?,
+       average_accuracy = (average_accuracy * total_sessions + ?) / (total_sessions + 1)`,
         [
           userId,
           safePoints,
@@ -80,8 +85,21 @@ const ScoringService = {
           safeAccuracy,
         ]
       );
-    } finally {
-      connection.release();
+
+      // ✅ CORREGIDO: Pasar los puntos nuevos para cálculos correctos
+      console.log("🏆 DEBUG - Verificando logros...");
+      const newAchievements =
+        await AchievementService.checkAndAwardAchievements(
+          userId,
+          sessionResults,
+          connection,
+          safePoints // ← Puntos de esta sesión
+        );
+
+      return newAchievements;
+    } catch (error) {
+      console.error("❌ Error en updateUserMetrics:", error);
+      throw error;
     }
   },
 };

@@ -188,7 +188,7 @@ router.post("/save-results", async (req, res) => {
       incorrectAnswers,
       gameMode,
       timeUsed = 0,
-      theme, // ← Este llega del frontend
+      theme,
     } = req.body;
 
     console.log("🔍 DEBUG - Datos recibidos en save-results:", {
@@ -197,7 +197,7 @@ router.post("/save-results", async (req, res) => {
       incorrectAnswersCount: incorrectAnswers?.length,
       gameMode,
       timeUsed,
-      theme, // ← Esto mostrará si llega undefined
+      theme,
     });
 
     // 1. Obtener user_id Y theme de la sesión
@@ -212,7 +212,7 @@ router.post("/save-results", async (req, res) => {
     }
 
     const userId = sessionData[0].user_id;
-    const sessionTheme = sessionData[0].theme; // ← Theme de la BD
+    const sessionTheme = sessionData[0].theme;
 
     console.log("🎯 THEME DEBUG - theme del frontend:", theme);
     console.log("🎯 THEME DEBUG - theme de la BD:", sessionTheme);
@@ -232,7 +232,7 @@ router.post("/save-results", async (req, res) => {
       accuracy: accuracy,
       timeUsed: timeUsed || 0,
       gameMode: gameMode || "unknown",
-      theme: finalTheme, // ← Usar el theme corregido
+      theme: finalTheme,
     };
 
     console.log("📊 DEBUG - sessionResults:", sessionResults);
@@ -266,7 +266,7 @@ router.post("/save-results", async (req, res) => {
       );
     }
 
-    // 6. ✅ NUEVO: Guardar métricas usando el servicio
+    // 6. ✅ Guardar métricas y logros
     console.log("💾 DEBUG - Guardando en session_scores...");
     await ScoringService.saveSessionScore(
       userId,
@@ -276,20 +276,30 @@ router.post("/save-results", async (req, res) => {
     );
 
     console.log("📈 DEBUG - Actualizando user_metrics...");
-    await ScoringService.updateUserMetrics(userId, sessionResults, points);
+    // ✅ CAMBIO: Pasar la conexión y recibir logros
+    const newAchievements = await ScoringService.updateUserMetrics(
+      userId,
+      sessionResults,
+      points,
+      connection // ← Pasar la conexión para transacción
+    );
 
-    await connection.commit(); // ← IMPORTANTE: Hacer commit
+    console.log("🏆 DEBUG - Logros otorgados:", newAchievements);
+
+    await connection.commit();
 
     console.log("✅ DEBUG - Todo guardado exitosamente");
 
+    // ✅ CAMBIO: Incluir logros en la respuesta
     res.json({
       success: true,
       points: points,
       accuracy: accuracy,
+      achievements: newAchievements, // ← Nuevo
     });
   } catch (error) {
     console.error("❌ ERROR en save-results:", error);
-    await connection.rollback(); // ← Rollback en caso de error
+    await connection.rollback();
     res.status(500).json({
       error: "Error al guardar resultados",
       details: error.message,
