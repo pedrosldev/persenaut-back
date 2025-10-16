@@ -179,6 +179,8 @@ router.post("/start", async (req, res) => {
 // });
 
 router.post("/save-results", async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
     const {
       sessionId,
@@ -186,21 +188,21 @@ router.post("/save-results", async (req, res) => {
       incorrectAnswers,
       gameMode,
       timeUsed = 0,
-      theme,
+      theme, // ← Este llega del frontend
     } = req.body;
-        console.log("🔍 DEBUG - Datos recibidos en save-results:", {
-          sessionId,
-          correctAnswersCount: correctAnswers?.length,
-          incorrectAnswersCount: incorrectAnswers?.length,
-          gameMode,
-          timeUsed,
-          theme,
-        });
-    const connection = await pool.getConnection();
 
-    // 1. Obtener user_id de la sesión
+    console.log("🔍 DEBUG - Datos recibidos en save-results:", {
+      sessionId,
+      correctAnswersCount: correctAnswers?.length,
+      incorrectAnswersCount: incorrectAnswers?.length,
+      gameMode,
+      timeUsed,
+      theme, // ← Esto mostrará si llega undefined
+    });
+
+    // 1. Obtener user_id Y theme de la sesión
     const [sessionData] = await connection.execute(
-      `SELECT user_id FROM intensive_sessions WHERE id = ?`,
+      `SELECT user_id, theme FROM intensive_sessions WHERE id = ?`,
       [sessionId]
     );
 
@@ -210,6 +212,14 @@ router.post("/save-results", async (req, res) => {
     }
 
     const userId = sessionData[0].user_id;
+    const sessionTheme = sessionData[0].theme; // ← Theme de la BD
+
+    console.log("🎯 THEME DEBUG - theme del frontend:", theme);
+    console.log("🎯 THEME DEBUG - theme de la BD:", sessionTheme);
+
+    // Usar el theme que venga o el de la BD como fallback
+    const finalTheme = theme || sessionTheme || "Tema desconocido";
+    console.log("🎯 THEME DEBUG - Usando theme:", finalTheme);
 
     // 2. Calcular métricas
     const totalQuestions = correctAnswers.length + incorrectAnswers.length;
@@ -218,18 +228,20 @@ router.post("/save-results", async (req, res) => {
 
     const sessionResults = {
       correctAnswers: correctAnswers.length,
-      totalQuestions: correctAnswers.length + incorrectAnswers.length,
-      accuracy:
-        totalQuestions > 0 ? (correctAnswers.length / totalQuestions) * 100 : 0,
-      timeUsed: timeUsed || 0, // ← Asegurar que no sea undefined
-      gameMode: gameMode || "unknown", // ← Asegurar que no sea undefined
-      theme: theme || "Sin tema", // ← Asegurar que no sea undefined
+      totalQuestions: totalQuestions,
+      accuracy: accuracy,
+      timeUsed: timeUsed || 0,
+      gameMode: gameMode || "unknown",
+      theme: finalTheme, // ← Usar el theme corregido
     };
+
+    console.log("📊 DEBUG - sessionResults:", sessionResults);
 
     // 3. Calcular puntos
     const points = ScoringService.calculatePoints(sessionResults);
+    console.log("💰 DEBUG - Puntos calculados:", points);
 
-    // 4. Guardar en base de datos (tu código existente + nuevo)
+    // 4. Guardar en intensive_sessions
     await connection.execute(
       `UPDATE intensive_sessions 
        SET correct_answers = ?, time_used = ?, completed_at = NOW() 
@@ -237,19 +249,38 @@ router.post("/save-results", async (req, res) => {
       [correctAnswers.length, timeUsed, sessionId]
     );
 
-    // Guardar respuestas individuales...
-    // (tu código existente para session_challenges)
+    // 5. Guardar respuestas individuales en session_challenges
+    for (const challengeId of correctAnswers) {
+      await connection.execute(
+        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
+         VALUES (?, ?, true)`,
+        [sessionId, challengeId]
+      );
+    }
 
-    // 5. ✅ NUEVO: Guardar métricas usando el servicio
+    for (const challengeId of incorrectAnswers) {
+      await connection.execute(
+        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
+         VALUES (?, ?, false)`,
+        [sessionId, challengeId]
+      );
+    }
+
+    // 6. ✅ NUEVO: Guardar métricas usando el servicio
+    console.log("💾 DEBUG - Guardando en session_scores...");
     await ScoringService.saveSessionScore(
       userId,
       sessionId,
       sessionResults,
       points
     );
+
+    console.log("📈 DEBUG - Actualizando user_metrics...");
     await ScoringService.updateUserMetrics(userId, sessionResults, points);
 
-    connection.release();
+    await connection.commit(); // ← IMPORTANTE: Hacer commit
+
+    console.log("✅ DEBUG - Todo guardado exitosamente");
 
     res.json({
       success: true,
@@ -257,8 +288,14 @@ router.post("/save-results", async (req, res) => {
       accuracy: accuracy,
     });
   } catch (error) {
-    console.error("Error saving results:", error);
-    res.status(500).json({ error: "Error al guardar resultados" });
+    console.error("❌ ERROR en save-results:", error);
+    await connection.rollback(); // ← Rollback en caso de error
+    res.status(500).json({
+      error: "Error al guardar resultados",
+      details: error.message,
+    });
+  } finally {
+    connection.release();
   }
 });
 
