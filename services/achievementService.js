@@ -1,5 +1,3 @@
-const pool = require("../config/db");
-
 const AchievementService = {
   checkAndAwardAchievements: async (
     userId,
@@ -32,9 +30,16 @@ const AchievementService = {
       const totalSessionsAfter = metrics.total_sessions + 1;
       const totalPointsAfter = metrics.total_points + newPoints;
 
+      // ✅ NUEVO: Debug específico para point_master
+      console.log("🔍 DEBUG point_master - Verificación:", {
+        puntos_totales_antes: metrics.total_points,
+        puntos_nueva_sesion: newPoints,
+        puntos_totales_despues: totalPointsAfter,
+        deberia_otorgar: totalPointsAfter >= 100 && metrics.total_points < 100,
+      });
+
       // LOGRO: Primera sesión - SOLO si era la primera
       if (metrics.total_sessions === 0) {
-        // ✅ CAMBIADO: 0 en lugar de 1
         const achievement = {
           achievement_id: "first_session",
           achievement_name: "🚀 Primeros Pasos",
@@ -42,7 +47,6 @@ const AchievementService = {
           points_earned: 50,
         };
 
-        // Verificar si ya tiene este logro
         const [existing] = await connection.execute(
           `SELECT id FROM user_achievements 
            WHERE user_id = ? AND achievement_id = ?`,
@@ -69,7 +73,6 @@ const AchievementService = {
 
       // LOGRO: Precisión perfecta - EXCLUIR modo supervivencia si falló
       if (sessionResults.gameMode === "survival") {
-        // En modo supervivencia, solo dar logro de precisión si no falló ninguna
         if (
           sessionResults.correctAnswers === sessionResults.totalQuestions &&
           sessionResults.totalQuestions >= 3
@@ -106,7 +109,6 @@ const AchievementService = {
           }
         }
       } else {
-        // Para otros modos, lógica normal de precisión perfecta
         if (
           sessionResults.accuracy === 100 &&
           sessionResults.totalQuestions >= 5
@@ -143,7 +145,7 @@ const AchievementService = {
         }
       }
 
-      // LOGRO: 5 sesiones completadas - ✅ USAR valor después del update
+      // LOGRO: 5 sesiones completadas
       if (totalSessionsAfter >= 5 && metrics.total_sessions < 5) {
         const achievement = {
           achievement_id: "dedicated_learner",
@@ -176,7 +178,7 @@ const AchievementService = {
         }
       }
 
-      // LOGRO: 100 puntos totales - ✅ USAR valor después del update
+      // LOGRO: 100 puntos totales
       if (totalPointsAfter >= 100 && metrics.total_points < 100) {
         const achievement = {
           achievement_id: "point_master",
