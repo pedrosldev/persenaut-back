@@ -19,6 +19,7 @@ const pool = require('./config/db');
 const { generatePrompt, generatePromptFromNotes, formatQuestion } = require("./services/promptService");
 const schedulerService = require("./services/schedulerService");
 const metricsRoutes = require("./routes/metrics");
+const themeRoutes = require("./routes/themes");
 
 
 const corsOptions = {
@@ -42,7 +43,7 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204,
   credentials: true
@@ -57,6 +58,7 @@ app.use(cors(corsOptions));
 app.use('/api/auth', authRoutes);
 app.use('/api/intensive-review', intensiveReviewRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/themes", themeRoutes);
 
 
 
