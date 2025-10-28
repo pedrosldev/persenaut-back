@@ -154,4 +154,51 @@ router.post("/delete-multiple", async (req, res) => {
   }
 });
 
+// Eliminar un tema específico con nivel
+router.delete('/:theme/:level', async (req, res) => {
+  try {
+    // Decodificar el tema y nivel de la URL
+    const theme = decodeURIComponent(req.params.theme);
+    const level = decodeURIComponent(req.params.level);
+    const { userId } = req.body;
+
+    console.log(`🗑️ Eliminando tema específico: "${theme}", nivel: "${level}", usuario: ${userId}`);
+
+    // Verificar que el tema+nivel existe y tiene preguntas del usuario
+    const [themeQuestions] = await pool.execute(
+      'SELECT COUNT(*) as count FROM questions WHERE theme = ? AND level = ? AND user_id = ?',
+      [theme, level, userId]
+    );
+
+    if (themeQuestions[0].count === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `Tema "${theme}" en nivel "${level}" no encontrado`
+      });
+    }
+
+    // Eliminar todas las preguntas del tema en ese nivel específico
+    const [result] = await pool.execute(
+      'DELETE FROM questions WHERE theme = ? AND level = ? AND user_id = ?',
+      [theme, level, userId]
+    );
+
+    console.log(`✅ Tema "${theme}" (nivel ${level}) eliminado - ${result.affectedRows} preguntas borradas`);
+
+    res.json({
+      success: true,
+      message: `Tema "${theme}" (${level}) eliminado correctamente`,
+      deletedQuestions: result.affectedRows
+    });
+
+  } catch (error) {
+    console.error('❌ Error eliminando tema específico:', error);
+    res.status(500).json({
+      success: false,
+      error: "Error al eliminar el tema",
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;
