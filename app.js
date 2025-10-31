@@ -383,6 +383,48 @@ app.post("/api/tutor-advice", async (req, res) => {
   }
 });
 
+// En tu app.js - EL ENDPOINT QUE YA TENÍAMOS
+app.post("/api/save-intensive-response", async (req, res) => {
+  const { sessionId, questionId, selectedAnswer, isCorrect, responseTime } = req.body;
+
+  try {
+    const connection = await pool.getConnection();
+    
+    // Verificar que la sesión existe
+    const [session] = await connection.execute(
+      'SELECT id FROM intensive_sessions WHERE id = ?',
+      [sessionId] // sessionId es VARCHAR(255)
+    );
+
+    if (session.length === 0) {
+      connection.release();
+      return res.status(404).json({ error: "Sesión intensiva no encontrada" });
+    }
+
+    // Guardar la respuesta individual
+    const [result] = await connection.execute(
+      `INSERT INTO intensive_responses (session_id, question_id, selected_answer, is_correct, response_time) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [sessionId, questionId, selectedAnswer, isCorrect, responseTime]
+    );
+
+    connection.release();
+
+    res.json({
+      success: true,
+      savedResponseId: result.insertId,
+      message: "Respuesta intensiva guardada correctamente"
+    });
+
+  } catch (error) {
+    console.error("Error saving intensive response:", error);
+    res.status(500).json({
+      error: "Error al guardar la respuesta intensiva",
+      details: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`Servidor escuchando en http://localhost:${PORT}`);

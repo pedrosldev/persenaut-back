@@ -22,45 +22,85 @@ class TutorService {
     }
   }
 
+  // services/tutorService.js - ACTUALIZA getUserMetrics
   async getUserMetrics(userId, timeRange) {
     const connection = await require("../config/db").getConnection();
 
-    // Obtener estadísticas de respuestas
+    // 1. Obtener estadísticas de retos normales (ya lo tienes)
     const [responseStats] = await connection.execute(
       `
-      SELECT 
-        COUNT(*) as total_questions,
-        SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
-        AVG(CASE WHEN ur.is_correct = 1 THEN ur.response_time ELSE NULL END) as avg_correct_time,
-        AVG(CASE WHEN ur.is_correct = 0 THEN ur.response_time ELSE NULL END) as avg_incorrect_time,
-        q.theme,
-        COUNT(DISTINCT q.theme) as themes_count
-      FROM user_responses ur
-      JOIN questions q ON ur.question_id = q.id
-      WHERE ur.user_id = ? 
-        AND ur.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
-      GROUP BY q.theme
-      ORDER BY correct_answers ASC
-    `,
+    SELECT 
+      COUNT(*) as total_questions,
+      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
+      AVG(CASE WHEN ur.is_correct = 1 THEN ur.response_time ELSE NULL END) as avg_correct_time,
+      AVG(CASE WHEN ur.is_correct = 0 THEN ur.response_time ELSE NULL END) as avg_incorrect_time,
+      q.theme,
+      COUNT(DISTINCT q.theme) as themes_count
+    FROM user_responses ur
+    JOIN questions q ON ur.question_id = q.id
+    WHERE ur.user_id = ? 
+      AND ur.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
+    GROUP BY q.theme
+    ORDER BY correct_answers ASC
+  `,
       [userId]
     );
 
-    // Obtener temas con mayor dificultad
+    // 2. ✅ NUEVO: Obtener estadísticas del modo intensivo
+    const [intensiveStats] = await connection.execute(
+      `
+    SELECT 
+      isess.theme,
+      isess.game_mode,
+      COUNT(*) as total_questions,
+      SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
+      AVG(ir.response_time) as avg_response_time,
+      (SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
+    FROM intensive_responses ir
+    JOIN intensive_sessions isess ON ir.session_id = isess.id
+    WHERE isess.user_id = ?
+      AND ir.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
+    GROUP BY isess.theme, isess.game_mode
+    ORDER BY success_rate ASC
+  `,
+      [userId]
+    );
+
+    // 3. ✅ NUEVO: Obtener sesiones intensivas recientes
+    const [recentSessions] = await connection.execute(
+      `
+    SELECT 
+      theme,
+      game_mode,
+      total_questions,
+      correct_answers,
+      (correct_answers / total_questions) * 100 as accuracy,
+      time_used,
+      created_at
+    FROM intensive_sessions 
+    WHERE user_id = ?
+    ORDER BY created_at DESC 
+    LIMIT 5
+  `,
+      [userId]
+    );
+
+    // 4. Obtener temas con mayor dificultad (ya lo tienes)
     const [weakThemes] = await connection.execute(
       `
-      SELECT 
-        q.theme,
-        COUNT(*) as total_attempts,
-        SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
-        (SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-      FROM user_responses ur
-      JOIN questions q ON ur.question_id = q.id
-      WHERE ur.user_id = ?
-      GROUP BY q.theme
-      HAVING total_attempts >= 3
-      ORDER BY success_rate ASC
-      LIMIT 5
-    `,
+    SELECT 
+      q.theme,
+      COUNT(*) as total_attempts,
+      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
+      (SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
+    FROM user_responses ur
+    JOIN questions q ON ur.question_id = q.id
+    WHERE ur.user_id = ?
+    GROUP BY q.theme
+    HAVING total_attempts >= 3
+    ORDER BY success_rate ASC
+    LIMIT 5
+  `,
       [userId]
     );
 
@@ -68,6 +108,8 @@ class TutorService {
 
     return {
       responseStats,
+      intensiveStats, // ← NUEVO
+      recentSessions, // ← NUEVO
       weakThemes,
       timeRange,
       totalQuestions: responseStats.reduce(
@@ -87,6 +129,83 @@ class TutorService {
             100
           : 0,
     };
+  }
+
+  // ACTUALIZA buildTutorPrompt para incluir datos intensivos
+  buildTutorPrompt(metrics) {
+    const intensiveStats = metrics.intensiveStats || [];
+    const recentSessions = metrics.recentSessions || [];
+
+    let intensiveAnalysis = "";
+
+    if (intensiveStats.length > 0) {
+      intensiveAnalysis = `
+ANÁLISIS DE MODO INTENSIVO:
+${intensiveStats
+  .map(
+    (stat) =>
+      `- ${stat.theme} (${stat.game_mode}): ${stat.correct_answers}/${
+        stat.total_questions
+      } correctas (${stat.success_rate.toFixed(1)}%), tiempo promedio: ${
+        stat.avg_response_time ? stat.avg_response_time.toFixed(1) + "s" : "N/A"
+      }`
+  )
+  .join("\n")}
+    `.trim();
+    }
+
+    let recentSessionsInfo = "";
+    if (recentSessions.length > 0) {
+      recentSessionsInfo = `
+SESIONES INTENSIVAS RECIENTES:
+${recentSessions
+  .map(
+    (session) =>
+      `- ${session.theme} (${session.game_mode}): ${session.accuracy.toFixed(
+        1
+      )}% precisión, ${
+        session.time_used ? session.time_used + "s" : "sin tiempo"
+      }`
+  )
+  .join("\n")}
+    `.trim();
+    }
+
+    return `
+Eres un tutor educativo inteligente. Analiza las siguientes métricas de aprendizaje del estudiante y proporciona recomendaciones personalizadas:
+
+MÉTRICAS DE RETOS NORMALES:
+- Precisión general: ${metrics.overallAccuracy.toFixed(1)}%
+- Total de preguntas respondidas: ${metrics.totalQuestions}
+- Temas con mayor dificultad: ${metrics.weakThemes
+      .map(
+        (theme) =>
+          `${theme.theme} (${theme.success_rate.toFixed(1)}% de aciertos)`
+      )
+      .join(", ")}
+
+${intensiveAnalysis}
+
+${recentSessionsInfo}
+
+Proporciona una respuesta estructurada en JSON con este formato:
+{
+  "analysis": "Análisis general que combine datos de ambos modos",
+  "strengths": ["Fortaleza 1", "Fortaleza 2"],
+  "weaknesses": ["Debilidad 1", "Debilidad 2"],
+  "recommendations": [
+    {
+      "type": "theme_review|study_technique|practice_strategy|game_mode_suggestion",
+      "title": "Título de la recomendación",
+      "description": "Descripción detallada",
+      "priority": "high|medium|low"
+    }
+  ],
+  "weekly_goals": ["Objetivo 1", "Objetivo 2"],
+  "encouragement": "Mensaje motivacional personalizado"
+}
+
+Sé específico, constructivo y motivador. Incluye comparativas entre modos de práctica cuando sea relevante.`;
   }
 
   buildTutorPrompt(metrics) {
