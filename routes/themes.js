@@ -59,76 +59,167 @@ router.get("/user/:userId", async (req, res) => {
 });
 
 // ELIMINAR TODO EL TEMA (FUNCIONABA)
+// router.delete("/:theme", async (req, res) => {
+//   try {
+//     const theme = decodeURIComponent(req.params.theme);
+//     const { userId } = req.body;
+
+//     console.log(
+//       `🗑️ ELIMINANDO TEMA COMPLETO: "${theme}" para usuario: ${userId}`
+//     );
+
+//     // Verificar que el tema existe
+//     const [themeQuestions] = await pool.execute(
+//       "SELECT COUNT(*) as count FROM questions WHERE theme = ? AND user_id = ?",
+//       [theme, userId]
+//     );
+
+//     if (themeQuestions[0].count === 0) {
+//       return res.status(404).json({
+//         success: false,
+//         error: `Tema "${theme}" no encontrado`,
+//       });
+//     }
+
+//     // ELIMINAR TODAS las preguntas del tema (todos los niveles)
+//     const [result] = await pool.execute(
+//       "DELETE FROM questions WHERE theme = ? AND user_id = ?",
+//       [theme, userId]
+//     );
+
+//     console.log(
+//       `✅ TEMA COMPLETO ELIMINADO: "${theme}" - ${result.affectedRows} preguntas borradas`
+//     );
+
+//     res.json({
+//       success: true,
+//       message: `Tema "${theme}" eliminado completamente`,
+//       deletedQuestions: result.affectedRows,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error eliminando tema:", error);
+//     res.status(500).json({
+//       success: false,
+//       error: "Error al eliminar el tema",
+//       details: error.message,
+//     });
+//   }
+// });
 router.delete("/:theme", async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
+    await connection.beginTransaction();
+
     const theme = decodeURIComponent(req.params.theme);
     const { userId } = req.body;
 
+    console.log(`🔍 VALORES RECIBIDOS:`);
+    console.log(`   - Theme: "${theme}" (longitud: ${theme.length})`);
+    console.log(`   - UserId: ${userId}`);
+
+    // 🔍 VERIFICAR QUÉ HAY EN INTENSIVE_SESSIONS
+    const [dbThemes] = await connection.execute(
+      "SELECT DISTINCT theme FROM intensive_sessions WHERE user_id = ?",
+      [userId]
+    );
     console.log(
-      `🗑️ ELIMINANDO TEMA COMPLETO: "${theme}" para usuario: ${userId}`
+      `📋 Temas en intensive_sessions:`,
+      dbThemes.map((t) => `"${t.theme}"`)
     );
 
-    // Verificar que el tema existe
-    const [themeQuestions] = await pool.execute(
+    // 🔍 VERIFICAR SI EXISTE EXACTAMENTE
+    const [exactMatch] = await connection.execute(
+      "SELECT COUNT(*) as count FROM intensive_sessions WHERE theme = ? AND user_id = ?",
+      [theme, userId]
+    );
+    console.log(
+      `🎯 Coincidencia exacta en intensive_sessions: ${exactMatch[0].count}`
+    );
+
+    // Verificar que el tema existe en questions
+    const [themeQuestions] = await connection.execute(
       "SELECT COUNT(*) as count FROM questions WHERE theme = ? AND user_id = ?",
       [theme, userId]
     );
 
     if (themeQuestions[0].count === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
         error: `Tema "${theme}" no encontrado`,
       });
     }
 
-    // ELIMINAR TODAS las preguntas del tema (todos los niveles)
-    const [result] = await pool.execute(
+    // Eliminar sesiones intensivas
+    const [sessionResult] = await connection.execute(
+      "DELETE FROM intensive_sessions WHERE theme = ? AND user_id = ?",
+      [theme, userId]
+    );
+    console.log(`🗑️ Sesiones eliminadas: ${sessionResult.affectedRows}`);
+
+    // Eliminar preguntas
+    const [questionsResult] = await connection.execute(
       "DELETE FROM questions WHERE theme = ? AND user_id = ?",
       [theme, userId]
     );
+    console.log(`🗑️ Preguntas eliminadas: ${questionsResult.affectedRows}`);
 
-    console.log(
-      `✅ TEMA COMPLETO ELIMINADO: "${theme}" - ${result.affectedRows} preguntas borradas`
-    );
+    await connection.commit();
 
     res.json({
       success: true,
       message: `Tema "${theme}" eliminado completamente`,
-      deletedQuestions: result.affectedRows,
+      deletedQuestions: questionsResult.affectedRows,
+      deletedSessions: sessionResult.affectedRows,
     });
   } catch (error) {
+    await connection.rollback();
     console.error("❌ Error eliminando tema:", error);
     res.status(500).json({
       success: false,
       error: "Error al eliminar el tema",
       details: error.message,
     });
+  } finally {
+    connection.release();
   }
 });
 
-// Eliminar múltiples temas (opcional)
 router.post("/delete-multiple", async (req, res) => {
   try {
-    const { themes, userId } = req.body; // Cambiado de themesWithLevels a themes
+    const { themes, userId } = req.body;
 
     if (!themes || !Array.isArray(themes) || themes.length === 0) {
       return res.status(400).json({ error: "Lista de temas no válida" });
     }
 
-    let totalDeleted = 0;
+    let totalDeletedQuestions = 0;
+    let totalDeletedSessions = 0; // ⬅️ NUEVO
     const connection = await pool.getConnection();
 
     try {
       await connection.beginTransaction();
 
       for (const theme of themes) {
-        const [result] = await connection.execute(
+        // ⬅️ ELIMINAR SESIONES INTENSIVAS PRIMERO
+        const [sessionResult] = await connection.execute(
+          "DELETE FROM intensive_sessions WHERE theme = ? AND user_id = ?",
+          [theme, userId]
+        );
+        totalDeletedSessions += sessionResult.affectedRows;
+        console.log(
+          `🗑️ Sesiones eliminadas para "${theme}": ${sessionResult.affectedRows}`
+        );
+
+        // LUEGO ELIMINAR PREGUNTAS
+        const [questionsResult] = await connection.execute(
           "DELETE FROM questions WHERE theme = ? AND user_id = ?",
           [theme, userId]
         );
-        totalDeleted += result.affectedRows;
+        totalDeletedQuestions += questionsResult.affectedRows;
         console.log(
-          `🗑️ Eliminado tema completo: ${theme} - ${result.affectedRows} preguntas`
+          `🗑️ Preguntas eliminadas para "${theme}": ${questionsResult.affectedRows}`
         );
       }
 
@@ -137,7 +228,8 @@ router.post("/delete-multiple", async (req, res) => {
       res.json({
         success: true,
         message: `${themes.length} temas eliminados correctamente`,
-        deletedQuestions: totalDeleted,
+        deletedQuestions: totalDeletedQuestions,
+        deletedSessions: totalDeletedSessions, // ⬅️ NUEVO
       });
     } catch (error) {
       await connection.rollback();
@@ -154,50 +246,67 @@ router.post("/delete-multiple", async (req, res) => {
   }
 });
 
-// Eliminar un tema específico con nivel
-router.delete('/:theme/:level', async (req, res) => {
+router.delete("/:theme/:level", async (req, res) => {
+  const connection = await pool.getConnection();
+
   try {
-    // Decodificar el tema y nivel de la URL
+    await connection.beginTransaction();
+
     const theme = decodeURIComponent(req.params.theme);
     const level = decodeURIComponent(req.params.level);
     const { userId } = req.body;
 
-    console.log(`🗑️ Eliminando tema específico: "${theme}", nivel: "${level}", usuario: ${userId}`);
+    console.log(
+      `🗑️ Eliminando tema específico: "${theme}", nivel: "${level}", usuario: ${userId}`
+    );
 
-    // Verificar que el tema+nivel existe y tiene preguntas del usuario
-    const [themeQuestions] = await pool.execute(
-      'SELECT COUNT(*) as count FROM questions WHERE theme = ? AND level = ? AND user_id = ?',
+    // Verificar que el tema+nivel existe
+    const [themeQuestions] = await connection.execute(
+      "SELECT COUNT(*) as count FROM questions WHERE theme = ? AND level = ? AND user_id = ?",
       [theme, level, userId]
     );
 
     if (themeQuestions[0].count === 0) {
+      await connection.rollback();
       return res.status(404).json({
         success: false,
-        error: `Tema "${theme}" en nivel "${level}" no encontrado`
+        error: `Tema "${theme}" en nivel "${level}" no encontrado`,
       });
     }
 
-    // Eliminar todas las preguntas del tema en ese nivel específico
-    const [result] = await pool.execute(
-      'DELETE FROM questions WHERE theme = ? AND level = ? AND user_id = ?',
+    // ⬅️ PRIMERO: Eliminar SESIONES INTENSIVAS del tema (SIEMPRE)
+    const [sessionResult] = await connection.execute(
+      "DELETE FROM intensive_sessions WHERE theme = ? AND user_id = ?",
+      [theme, userId]
+    );
+    console.log(
+      `🗑️ Sesiones intensivas eliminadas: ${sessionResult.affectedRows}`
+    );
+
+    // ⬅️ SEGUNDO: Eliminar preguntas del nivel específico
+    const [questionsResult] = await connection.execute(
+      "DELETE FROM questions WHERE theme = ? AND level = ? AND user_id = ?",
       [theme, level, userId]
     );
 
-    console.log(`✅ Tema "${theme}" (nivel ${level}) eliminado - ${result.affectedRows} preguntas borradas`);
+    await connection.commit();
 
     res.json({
       success: true,
       message: `Tema "${theme}" (${level}) eliminado correctamente`,
-      deletedQuestions: result.affectedRows
+      deletedQuestions: questionsResult.affectedRows,
+      deletedSessions: sessionResult.affectedRows, // Ahora siempre tendrá valor
     });
-
   } catch (error) {
-    console.error('❌ Error eliminando tema específico:', error);
+    await connection.rollback();
+    console.error("❌ Error eliminando tema específico:", error);
     res.status(500).json({
       success: false,
       error: "Error al eliminar el tema",
-      details: error.message
+      details: error.message,
     });
+  } finally {
+    connection.release();
   }
 });
 
