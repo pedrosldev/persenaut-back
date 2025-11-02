@@ -19,6 +19,8 @@ const pool = require('./config/db');
 const { generatePrompt, generatePromptFromNotes, formatQuestion } = require("./services/promptService");
 const schedulerService = require("./services/schedulerService");
 const metricsRoutes = require("./routes/metrics");
+const themeRoutes = require("./routes/themes");
+const tutorService = require("./services/tutorService");
 
 
 const corsOptions = {
@@ -42,7 +44,7 @@ const corsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET', 'POST', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   optionsSuccessStatus: 204,
   credentials: true
@@ -57,6 +59,7 @@ app.use(cors(corsOptions));
 app.use('/api/auth', authRoutes);
 app.use('/api/intensive-review', intensiveReviewRoutes);
 app.use("/api/metrics", metricsRoutes);
+app.use("/api/themes", themeRoutes);
 
 
 
@@ -73,97 +76,6 @@ const retryRequest = async (config, attempt = 0) => {
     throw error;
   }
 };
-
-
-
-// app.post("/api/reto", async (req, res) => {
-//   const {
-//     theme,
-//     level,
-//     previousQuestions = [],
-//     userId,
-//     preferences = {},
-//   } = req.body;
-
-//   if (!theme || !level) {
-//     return res.status(400).json({ error: "Tema y nivel son requeridos" });
-//   }
-
-//   try {
-//     // 1. Generar el prompt usando el servicio del backend
-//     const prompt = generatePrompt(theme, level, previousQuestions);
-
-//     // 2. Llamar a Ollama para generar el reto
-//     const ollamaResponse = await retryRequest({
-//       method: "post",
-//       url: process.env.OLLAMA_API,
-//       data: {
-//         model: "mistral",
-//         prompt: prompt,
-//         stream: false,
-//         options: { repeat_penalty: 1.1 },
-//       },
-//     });
-
-//     if (!ollamaResponse.data?.response) {
-//       throw new Error("Estructura de respuesta inesperada de Ollama");
-//     }
-
-//     const responseText = ollamaResponse.data.response;
-
-//     // 3. Formatear la pregunta usando el servicio del backend
-//     const formattedQuestion = formatQuestion(responseText);
-
-//     // 4. Guardar en la base de datos (opcional, si quieres guardar inmediatamente)
-//     if (userId) {
-//       const connection = await pool.getConnection();
-//       const [result] = await connection.execute(
-//         `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
-//                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-//         [
-//           theme,
-//           level,
-//           formattedQuestion.questionText,
-//           JSON.stringify(formattedQuestion.options),
-//           formattedQuestion.correctAnswer,
-//           responseText,
-//           userId,
-//           preferences.deliveryTime || "09:00:00",
-//           preferences.frequency || "daily",
-//           true,
-//           // preferences.isActive !== undefined ? preferences.isActive : true,
-          
-//         ]
-//       );
-//       connection.release();
-
-//       // 5. Devolver respuesta completa
-//       res.json({
-//         success: true,
-//         question: formattedQuestion,
-//         rawResponse: responseText,
-//         promptUsed: prompt,
-//         savedQuestionId: result.insertId,
-//         message: "Pregunta generada y guardada correctamente",
-//       });
-//     } else {
-//       // Si no hay userId, solo devolver la pregunta generada
-//       res.json({
-//         success: true,
-//         question: formattedQuestion,
-//         rawResponse: responseText,
-//         promptUsed: prompt,
-//         message: "Pregunta generada correctamente",
-//       });
-//     }
-//   } catch (error) {
-//     console.error("Error en /api/reto:", error);
-//     res.status(500).json({
-//       error: "Error al generar la pregunta",
-//       details: error.message,
-//     });
-//   }
-// });
 
 app.post("/api/reto", async (req, res) => {
   const {
@@ -402,6 +314,113 @@ app.post("/api/generate-from-notes", async (req, res) => {
     res.status(500).json({
       error: "Error al generar reto desde apuntes",
       details: error.message,
+    });
+  }
+});
+// Endpoint para guardar respuestas de usuarios
+app.post("/api/save-response", async (req, res) => {
+  const { userId, questionId, selectedAnswer, responseTime } = req.body;
+
+  try {
+    const connection = await pool.getConnection();
+    
+    // Obtener la respuesta correcta
+    const [question] = await connection.execute(
+      'SELECT correct_answer FROM questions WHERE id = ?',
+      [questionId]
+    );
+
+    if (question.length === 0) {
+      connection.release();
+      return res.status(404).json({ error: "Pregunta no encontrada" });
+    }
+
+    const isCorrect = selectedAnswer === question[0].correct_answer;
+
+    // Guardar la respuesta
+    const [result] = await connection.execute(
+      `INSERT INTO user_responses (user_id, question_id, selected_answer, is_correct, response_time) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [userId, questionId, selectedAnswer, isCorrect, responseTime]
+    );
+
+    connection.release();
+
+    res.json({
+      success: true,
+      isCorrect,
+      savedResponseId: result.insertId
+    });
+
+  } catch (error) {
+    console.error("Error saving response:", error);
+    res.status(500).json({
+      error: "Error al guardar la respuesta",
+      details: error.message
+    });
+  }
+});
+
+// Endpoint para obtener análisis del tutor IA
+app.post("/api/tutor-advice", async (req, res) => {
+  const { userId, timeRange = 'week' } = req.body;
+
+  try {
+    const advice = await tutorService.generateTutorAdvice(userId, timeRange);
+    
+    res.json({
+      success: true,
+      advice,
+      generatedAt: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error("Error getting tutor advice:", error);
+    res.status(500).json({
+      error: "Error al generar recomendaciones",
+      details: error.message
+    });
+  }
+});
+
+// En tu app.js - EL ENDPOINT QUE YA TENÍAMOS
+app.post("/api/save-intensive-response", async (req, res) => {
+  const { sessionId, questionId, selectedAnswer, isCorrect, responseTime } = req.body;
+
+  try {
+    const connection = await pool.getConnection();
+    
+    // Verificar que la sesión existe
+    const [session] = await connection.execute(
+      'SELECT id FROM intensive_sessions WHERE id = ?',
+      [sessionId] // sessionId es VARCHAR(255)
+    );
+
+    if (session.length === 0) {
+      connection.release();
+      return res.status(404).json({ error: "Sesión intensiva no encontrada" });
+    }
+
+    // Guardar la respuesta individual
+    const [result] = await connection.execute(
+      `INSERT INTO intensive_responses (session_id, question_id, selected_answer, is_correct, response_time) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [sessionId, questionId, selectedAnswer, isCorrect, responseTime]
+    );
+
+    connection.release();
+
+    res.json({
+      success: true,
+      savedResponseId: result.insertId,
+      message: "Respuesta intensiva guardada correctamente"
+    });
+
+  } catch (error) {
+    console.error("Error saving intensive response:", error);
+    res.status(500).json({
+      error: "Error al guardar la respuesta intensiva",
+      details: error.message
     });
   }
 });
