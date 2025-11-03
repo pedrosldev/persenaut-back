@@ -363,22 +363,16 @@ app.post("/api/save-response", async (req, res) => {
 
 // Endpoint para obtener análisis del tutor IA
 app.post("/api/tutor-advice", async (req, res) => {
-  const { userId, timeRange = 'week' } = req.body;
+  const { userId, timeRange = "week" } = req.body;
 
   try {
     const advice = await tutorService.generateTutorAdvice(userId, timeRange);
-    
-    res.json({
-      success: true,
-      advice,
-      generatedAt: new Date().toISOString()
-    });
-
+    res.json(advice); // ✅ devolvemos el objeto directo
   } catch (error) {
     console.error("Error getting tutor advice:", error);
     res.status(500).json({
       error: "Error al generar recomendaciones",
-      details: error.message
+      details: error.message,
     });
   }
 });
