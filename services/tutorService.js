@@ -24,38 +24,123 @@ class TutorService {
         return this.getFallbackAdvice();
       }
 
-      // 4️⃣ Intentar parsear si viene en JSON
+      // 4️⃣ PARSER MEJORADO Y ROBUSTO
       let parsedAdvice;
       try {
-        const cleaned = rawText.replace(/```json\n?|\n?```/g, "").trim();
+        // Limpieza más agresiva del texto
+        let cleaned = rawText
+          .replace(/```json\n?|\n?```/g, "") // Remove code blocks
+          .replace(/🤖 Tu Tutor IA[\s\S]*?📊 Análisis/g, "") // Remove UI text
+          .replace(/"perro en el panel del frint[^"]*"/g, "") // Remove random text
+          .trim();
+
+        // Buscar el primer JSON válido (en caso de múltiples)
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleaned = jsonMatch[0];
+        }
+
+        // Arreglar problemas comunes de formato
+        cleaned = cleaned
+          .replace(/\n\s*\n/g, "\n") // Multiple newlines to single
+          .replace(/,\s*\n\s*}/g, "\n}") // Trailing commas
+          .replace(/,\s*\n\s*]/g, "\n]") // Trailing commas in arrays
+          .replace(/\"\s*\n\s*"/g, '",\n"'); // Missing commas in objects
+
         parsedAdvice = JSON.parse(cleaned);
+
+        console.log("✅ JSON parseado correctamente:", {
+          analysis: parsedAdvice.analysis?.substring(0, 50) + "...",
+          recommendations: parsedAdvice.recommendations?.length,
+        });
       } catch (parseError) {
-        console.warn("Tutor: no se pudo parsear JSON, devolviendo texto plano");
-        parsedAdvice = {
-          analysis: rawText,
-          strengths: [],
-          weaknesses: [],
-          recommendations: [],
-          weekly_goals: [],
-          encouragement: "¡Sigue mejorando cada día! 🚀",
-        };
+        console.warn(
+          "Tutor: no se pudo parsear JSON, intentando recuperación...",
+          parseError
+        );
+        console.log("Raw text problemático:", rawText.substring(0, 200));
+
+        // Intentar extraer información aunque el JSON esté corrupto
+        parsedAdvice = this.extractFromCorruptedJSON(rawText);
       }
 
-      // 5️⃣ Validar estructura mínima
-      return {
-        analysis: parsedAdvice.analysis || "Sin análisis disponible.",
-        strengths: parsedAdvice.strengths || [],
-        weaknesses: parsedAdvice.weaknesses || [],
-        recommendations: parsedAdvice.recommendations || [],
-        weekly_goals: parsedAdvice.weekly_goals || [],
-        encouragement:
-          parsedAdvice.encouragement ||
-          "¡Cada paso te acerca más a tu objetivo! 💪",
-      };
+      // 5️⃣ Validar y completar estructura
+      return this.validateAndCompleteAdvice(parsedAdvice);
     } catch (error) {
       console.error("Error generating tutor advice:", error);
       return this.getFallbackAdvice();
     }
+  }
+
+  // Nuevo método para extraer datos de JSON corrupto
+  extractFromCorruptedJSON(rawText) {
+    const extracted = {
+      analysis: "",
+      strengths: [],
+      weaknesses: [],
+      recommendations: [],
+      weekly_goals: [],
+      encouragement: "",
+    };
+
+    try {
+      // Extraer análisis
+      const analysisMatch = rawText.match(/"analysis":\s*"([^"]*)"/);
+      if (analysisMatch) {
+        extracted.analysis = analysisMatch[1];
+      }
+
+      // Extraer fortalezas
+      const strengthsMatch = rawText.match(/"strengths":\s*\[([^\]]*)\]/);
+      if (strengthsMatch) {
+        extracted.strengths = strengthsMatch[1]
+          .split(",")
+          .map((s) => s.replace(/["']/g, "").trim())
+          .filter((s) => s.length > 0);
+      }
+
+      // Extraer recomendaciones (simplificado)
+      const recMatches = rawText.match(/"title":\s*"([^"]*)"/g);
+      if (recMatches) {
+        extracted.recommendations = recMatches.map((match, index) => ({
+          type: "practice_strategy",
+          title: match.replace(/"title":\s*"/, "").replace(/"$/, ""),
+          description: `Recomendación ${index + 1} extraída`,
+          priority: index === 0 ? "high" : "medium",
+        }));
+      }
+
+      // Si no se pudo extraer nada, usar el texto completo como análisis
+      if (!extracted.analysis && rawText.length < 1000) {
+        extracted.analysis = rawText;
+      }
+    } catch (error) {
+      console.warn("Error en extracción de JSON corrupto:", error);
+    }
+
+    return extracted;
+  }
+
+  // Método para validar y completar la estructura
+  validateAndCompleteAdvice(advice) {
+    const defaultAdvice = this.getFallbackAdvice();
+
+    return {
+      analysis: advice.analysis || defaultAdvice.analysis,
+      strengths: Array.isArray(advice.strengths)
+        ? advice.strengths
+        : defaultAdvice.strengths,
+      weaknesses: Array.isArray(advice.weaknesses)
+        ? advice.weaknesses
+        : defaultAdvice.weaknesses,
+      recommendations: Array.isArray(advice.recommendations)
+        ? advice.recommendations
+        : defaultAdvice.recommendations,
+      weekly_goals: Array.isArray(advice.weekly_goals)
+        ? advice.weekly_goals
+        : defaultAdvice.weekly_goals,
+      encouragement: advice.encouragement || defaultAdvice.encouragement,
+    };
   }
 
   // services/tutorService.js - ACTUALIZA getUserMetrics
@@ -169,92 +254,36 @@ class TutorService {
 
   // ACTUALIZA buildTutorPrompt para incluir datos intensivos
   buildTutorPrompt(metrics) {
-    const intensiveStats = metrics.intensiveStats || [];
-    const recentSessions = metrics.recentSessions || [];
-
-    let intensiveAnalysis = "";
-
-    if (intensiveStats.length > 0) {
-      intensiveAnalysis = `
-ANÁLISIS DE MODO INTENSIVO:
-${intensiveStats
-  .map((stat) => {
-    const rate = parseFloat(stat.success_rate) || 0;
-    const avgTime = parseFloat(stat.avg_response_time) || 0;
-    const correct = parseInt(stat.correct_answers) || 0;
-    const total = parseInt(stat.total_questions) || 0;
-    return `- ${stat.theme} (${
-      stat.game_mode
-    }): ${correct}/${total} correctas (${rate.toFixed(1)}%), tiempo promedio: ${
-      avgTime ? avgTime.toFixed(1) + "s" : "N/A"
-    }`;
-  })
-  .join("\n")}
-    `.trim();
-    }
-
-    let recentSessionsInfo = "";
-    if (recentSessions.length > 0) {
-      recentSessionsInfo = `
-SESIONES INTENSIVAS RECIENTES:
-${recentSessions
-  .map((session) => {
-    const accuracy = parseFloat(session.accuracy) || 0;
-    return `- ${session.theme} (${session.game_mode}): ${accuracy.toFixed(
-      1
-    )}% precisión, ${
-      session.time_used ? session.time_used + "s" : "sin tiempo"
-    }`;
-  })
-  .join("\n")}
-    `.trim();
-    }
-
-    // 🔒 Conversión segura también para weakThemes
-    const weakThemesInfo =
-      metrics.weakThemes && metrics.weakThemes.length > 0
-        ? metrics.weakThemes
-            .map((theme) => {
-              const rate = parseFloat(theme.success_rate) || 0;
-              return `${theme.theme} (${rate.toFixed(1)}% de aciertos)`;
-            })
-            .join(", ")
-        : "Sin datos suficientes";
-
-    // 🔒 Conversión segura para overallAccuracy
-    const overallAccuracy = parseFloat(metrics.overallAccuracy) || 0;
-    const totalQuestions = parseInt(metrics.totalQuestions) || 0;
-
     return `
-Eres un tutor educativo inteligente. Analiza las siguientes métricas de aprendizaje del estudiante y proporciona recomendaciones personalizadas:
+IMPORTANTE: Devuelve SOLAMENTE un objeto JSON válido, sin texto adicional, sin markdown, sin code blocks.
 
-MÉTRICAS DE RETOS NORMALES:
-- Precisión general: ${overallAccuracy.toFixed(1)}%
-- Total de preguntas respondidas: ${totalQuestions}
-- Temas con mayor dificultad: ${weakThemesInfo}
+Eres un tutor educativo inteligente. Analiza las métricas y proporciona recomendaciones.
 
-${intensiveAnalysis}
+MÉTRICAS:
+- Precisión: ${metrics.overallAccuracy?.toFixed(1) || 0}%
+- Total preguntas: ${metrics.totalQuestions || 0}
+- Temas débiles: ${
+      metrics.weakThemes?.map((t) => t.theme).join(", ") || "Ninguno"
+    }
 
-${recentSessionsInfo}
-
-Proporciona una respuesta estructurada en JSON con este formato:
+RESPONDE EXCLUSIVAMENTE CON ESTE FORMATO JSON:
 {
-  "analysis": "Análisis general que combine datos de ambos modos",
+  "analysis": "Análisis breve aquí",
   "strengths": ["Fortaleza 1", "Fortaleza 2"],
   "weaknesses": ["Debilidad 1", "Debilidad 2"],
   "recommendations": [
     {
-      "type": "theme_review|study_technique|practice_strategy|game_mode_suggestion",
-      "title": "Título de la recomendación",
-      "description": "Descripción detallada",
-      "priority": "high|medium|low"
+      "type": "theme_review",
+      "title": "Título claro",
+      "description": "Descripción práctica",
+      "priority": "high"
     }
   ],
   "weekly_goals": ["Objetivo 1", "Objetivo 2"],
-  "encouragement": "Mensaje motivacional personalizado"
+  "encouragement": "Mensaje motivacional"
 }
 
-Sé específico, constructivo y motivador. Incluye comparativas entre modos de práctica cuando sea relevante.`;
+No incluyas ningún otro texto fuera del JSON.`;
   }
 
   //   buildTutorPrompt(metrics) {
