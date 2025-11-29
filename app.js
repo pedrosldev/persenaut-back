@@ -21,6 +21,7 @@ const schedulerService = require("./services/schedulerService");
 const metricsRoutes = require("./routes/metrics");
 const themeRoutes = require("./routes/themes");
 const tutorService = require("./services/tutorService");
+const profileRoutes = require("./routes/profile");
 
 
 const corsOptions = {
@@ -60,6 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/intensive-review', intensiveReviewRoutes);
 app.use("/api/metrics", metricsRoutes);
 app.use("/api/themes", themeRoutes);
+app.use("/api/user", profileRoutes);
 
 
 
