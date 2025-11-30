@@ -106,11 +106,17 @@ CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON user_achievements(user_id
 -- TABLA: session_challenges
 -- ========================================
 
--- Índice compuesto para queries por sesión y pregunta
-CREATE INDEX IF NOT EXISTS idx_session_challenges_session_question ON session_challenges(session_id, question_id);
+-- Índice compuesto para queries por sesión y desafío
+CREATE INDEX IF NOT EXISTS idx_session_challenges_session_challenge ON session_challenges(session_id, challenge_id);
 
 -- Índice para queries por sesión
 CREATE INDEX IF NOT EXISTS idx_session_challenges_session ON session_challenges(session_id);
+
+-- Índice para queries por desafío
+CREATE INDEX IF NOT EXISTS idx_session_challenges_challenge ON session_challenges(challenge_id);
+
+-- Índice para queries por respuestas correctas
+CREATE INDEX IF NOT EXISTS idx_session_challenges_correct ON session_challenges(correct);
 
 -- ========================================
 -- TABLA: session_scores
