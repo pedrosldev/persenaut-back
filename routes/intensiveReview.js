@@ -1,372 +1,230 @@
 const express = require("express");
 const router = express.Router();
-const pool = require("../config/db");
-const { v4: uuidv4 } = require("uuid");
-const { generatePrompt, formatQuestion } = require("../services/promptService");
-const ScoringService = require("../services/scoringService");
-const Groq = require("groq-sdk");
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const intensiveController = require("../controllers/intensiveController");
+const {
+  validateStartSession,
+  validateSaveResults,
+  validateGetUserThemes,
+  validateContinueSurvival,
+} = require("../middlewares/validators/intensiveValidator");
 
-async function generateAutoChallengesDirect(userId, theme, count, connection) {
-  const generatedChallenges = [];
+/**
+ * @swagger
+ * /intensive/start:
+ *   post:
+ *     summary: Iniciar sesión de modo intensivo
+ *     tags: [Intensive Mode]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - theme
+ *               - gameMode
+ *               - questionCount
+ *             properties:
+ *               userId:
+ *                 type: integer
+ *                 example: 1
+ *               theme:
+ *                 type: string
+ *                 description: Tema de la sesión
+ *                 example: Física
+ *               gameMode:
+ *                 type: string
+ *                 enum: [normal, survival, time_attack]
+ *                 description: Modo de juego
+ *                 example: survival
+ *               questionCount:
+ *                 type: integer
+ *                 description: Número de preguntas
+ *                 example: 10
+ *     responses:
+ *       200:
+ *         description: Sesión iniciada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sessionId:
+ *                   type: integer
+ *                   example: 123
+ *                 questions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Challenge'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
+// Rutas usando el controlador con validadores
+router.post("/start", validateStartSession, intensiveController.startSession);
 
-  for (let i = 0; i < count; i++) {
-    try {
-      const prompt = generatePrompt(theme, "avanzado", []);
+/**
+ * @swagger
+ * /intensive/save-results:
+ *   post:
+ *     summary: Guardar resultados de sesión intensiva
+ *     tags: [Intensive Mode]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionId
+ *               - userId
+ *               - correctAnswers
+ *               - timeUsed
+ *             properties:
+ *               sessionId:
+ *                 type: integer
+ *                 example: 123
+ *               userId:
+ *                 type: integer
+ *                 example: 1
+ *               correctAnswers:
+ *                 type: integer
+ *                 description: Número de respuestas correctas
+ *                 example: 8
+ *               timeUsed:
+ *                 type: integer
+ *                 description: Tiempo usado en segundos
+ *                 example: 120
+ *               responses:
+ *                 type: array
+ *                 description: Array de respuestas del usuario
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     questionId:
+ *                       type: integer
+ *                     userAnswer:
+ *                       type: string
+ *                     isCorrect:
+ *                       type: boolean
+ *                     responseTime:
+ *                       type: integer
+ *     responses:
+ *       200:
+ *         description: Resultados guardados exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Resultados guardados
+ *                 pointsEarned:
+ *                   type: integer
+ *                   example: 80
+ *                 accuracy:
+ *                   type: number
+ *                   example: 80.5
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
+router.post("/save-results", validateSaveResults, intensiveController.saveResults);
 
-      const completion = await groq.chat.completions.create({
-        messages: [{ role: "user", content: prompt }],
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.7,
-        max_tokens: 500,
-      });
+/**
+ * @swagger
+ * /intensive/user-themes/{userId}:
+ *   get:
+ *     summary: Obtener temas del usuario para modo intensivo
+ *     tags: [Intensive Mode]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID del usuario
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Lista de temas disponibles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   theme:
+ *                     type: string
+ *                     example: Química
+ *                   questionCount:
+ *                     type: integer
+ *                     description: Número de preguntas disponibles
+ *                     example: 25
+ *       401:
+ *         $ref: '#/components/responses/UnauthorizedError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
+router.get("/user-themes/:userId", validateGetUserThemes, intensiveController.getUserThemes);
 
-      const responseText = completion.choices[0]?.message?.content;
-
-      if (responseText) {
-        const formattedQuestion = formatQuestion(responseText);
-
-        // INSERT sin ID (autoincremental) y con todos los campos requeridos
-        const [result] = await connection.execute(
-          `INSERT INTO questions 
-           (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, display_status, created_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [
-            theme,
-            "avanzado", // nivel fijo
-            formattedQuestion.questionText,
-            JSON.stringify(formattedQuestion.options),
-            formattedQuestion.correctAnswer,
-            responseText,
-            userId, // el usuario logueado
-            "09:00:00", // delivery_time por defecto
-            "daily", // frequency por defecto
-            false, // is_active = false para no activar el trigger
-            "active", // display_status
-          ]
-        );
-
-        // Obtener el ID autogenerado
-        const insertedId = result.insertId;
-
-        generatedChallenges.push({
-          id: insertedId,
-          theme: theme,
-          question: formattedQuestion.questionText,
-          options: JSON.stringify(formattedQuestion.options), // ← Mantener como string para consistencia
-          correct_answer: formattedQuestion.correctAnswer,
-          level: "avanzado",
-        });
-
-        console.log(`✅ Reto auto-generado ID: ${insertedId}`);
-      }
-    } catch (error) {
-      console.error(`Error generando reto automático ${i + 1}:`, error);
-    }
-  }
-
-  return generatedChallenges;
-}
-
-router.post("/start", async (req, res) => {
-  try {
-    const { userId, theme, gameMode = "timed" } = req.body; // ← Nuevo parámetro
-    const sessionId = uuidv4();
-
-    const connection = await pool.getConnection();
-
-    // Determinar límite de preguntas según el modo
-    const challengeLimit = gameMode === "survival" ? 15 : 10; // Más preguntas para supervivencia
-    let challenges;
-    // Obtener retos existentes del usuario
-    const [existingChallenges] = await connection.execute(
-      `SELECT id, theme, question, options, correct_answer 
-       FROM questions 
-       WHERE user_id = ? AND theme LIKE ? 
-       ORDER BY RAND() LIMIT ?`,
-      [userId, `%${theme}%`, challengeLimit]
-    );
-    challenges = existingChallenges;
-    if (challenges.length === 0) {
-      connection.release();
-      return res.status(404).json({ error: "No hay retos para este tema" });
-    }
-
-    if (challenges.length < challengeLimit) {
-      const needed = challengeLimit - challenges.length;
-      console.log(`🔄 Generando ${needed} retos automáticamente`);
-
-      const generatedChallenges = await generateAutoChallengesDirect(
-        userId,
-        theme,
-        needed,
-        connection
-      );
-
-      // Combinar retos existentes + nuevos generados
-      challenges = [...challenges, ...generatedChallenges];
-    }
-
-    // Guardar sesión CON MODO DE JUEGO
-    await connection.execute(
-      `INSERT INTO intensive_sessions (id, user_id, theme, total_questions, game_mode) 
-       VALUES (?, ?, ?, ?, ?)`,
-      [sessionId, userId, theme, challenges.length, gameMode]
-    );
-
-    connection.release();
-
-    res.json({
-      sessionId,
-      gameMode, // ← Devolver el modo al frontend
-      challenges: challenges.map((c) => ({
-        ...c,
-        options: JSON.parse(c.options),
-      })),
-    });
-  } catch (error) {
-    console.error("Error starting intensive session:", error);
-    res.status(500).json({ error: "Error al iniciar sesión de repaso" });
-  }
-});
-
-// router.post("/save-results", async (req, res) => {
-//   try {
-//     const { sessionId, correctAnswers, incorrectAnswers, gameMode, timeUsed } =
-//       req.body;
-//     const connection = await pool.getConnection();
-
-//     // Actualizar sesión con tiempo usado si es modo ráfaga
-//     if (gameMode === "timed" && timeUsed !== undefined) {
-//       await connection.execute(
-//         `UPDATE intensive_sessions
-//          SET correct_answers = ?, time_used = ?, completed_at = NOW()
-//          WHERE id = ?`,
-//         [correctAnswers.length, timeUsed, sessionId]
-//       );
-//     } else {
-//       await connection.execute(
-//         `UPDATE intensive_sessions
-//          SET correct_answers = ?, completed_at = NOW()
-//          WHERE id = ?`,
-//         [correctAnswers.length, sessionId]
-//       );
-//     }
-
-//     // Guardar respuestas
-//     for (const challengeId of correctAnswers) {
-//       await connection.execute(
-//         `INSERT INTO session_challenges (session_id, challenge_id, correct)
-//          VALUES (?, ?, true)`,
-//         [sessionId, challengeId]
-//       );
-//     }
-
-//     for (const challengeId of incorrectAnswers) {
-//       await connection.execute(
-//         `INSERT INTO session_challenges (session_id, challenge_id, correct)
-//          VALUES (?, ?, false)`,
-//         [sessionId, challengeId]
-//       );
-//     }
-
-//     connection.release();
-//     res.json({ success: true });
-//   } catch (error) {
-//     console.error("Error saving results:", error);
-//     res.status(500).json({ error: "Error al guardar resultados" });
-//   }
-// });
-
-router.post("/save-results", async (req, res) => {
-  const connection = await pool.getConnection();
-
-  try {
-    const {
-      sessionId,
-      correctAnswers,
-      incorrectAnswers,
-      gameMode,
-      timeUsed = 0,
-      theme,
-    } = req.body;
-
-    console.log("🔍 DEBUG - Datos recibidos en save-results:", {
-      sessionId,
-      correctAnswersCount: correctAnswers?.length,
-      incorrectAnswersCount: incorrectAnswers?.length,
-      gameMode,
-      timeUsed,
-      theme,
-    });
-
-    // 1. Obtener user_id Y theme de la sesión
-    const [sessionData] = await connection.execute(
-      `SELECT user_id, theme FROM intensive_sessions WHERE id = ?`,
-      [sessionId]
-    );
-
-    if (sessionData.length === 0) {
-      connection.release();
-      return res.status(404).json({ error: "Sesión no encontrada" });
-    }
-
-    const userId = sessionData[0].user_id;
-    const sessionTheme = sessionData[0].theme;
-
-    console.log("🎯 THEME DEBUG - theme del frontend:", theme);
-    console.log("🎯 THEME DEBUG - theme de la BD:", sessionTheme);
-
-    // Usar el theme que venga o el de la BD como fallback
-    const finalTheme = theme || sessionTheme || "Tema desconocido";
-    console.log("🎯 THEME DEBUG - Usando theme:", finalTheme);
-
-    // 2. Calcular métricas
-    const totalQuestions = correctAnswers.length + incorrectAnswers.length;
-    const accuracy =
-      totalQuestions > 0 ? (correctAnswers.length / totalQuestions) * 100 : 0;
-
-    const sessionResults = {
-      correctAnswers: correctAnswers.length,
-      totalQuestions: totalQuestions,
-      accuracy: accuracy,
-      timeUsed: timeUsed || 0,
-      gameMode: gameMode || "unknown",
-      theme: finalTheme,
-    };
-
-    console.log("📊 DEBUG - sessionResults:", sessionResults);
-
-    // 3. Calcular puntos
-    const points = ScoringService.calculatePoints(sessionResults);
-    console.log("💰 DEBUG - Puntos calculados:", points);
-
-    // 4. Guardar en intensive_sessions
-    await connection.execute(
-      `UPDATE intensive_sessions 
-       SET correct_answers = ?, time_used = ?, completed_at = NOW() 
-       WHERE id = ?`,
-      [correctAnswers.length, timeUsed, sessionId]
-    );
-
-    // 5. Guardar respuestas individuales en session_challenges
-    for (const challengeId of correctAnswers) {
-      await connection.execute(
-        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
-         VALUES (?, ?, true)`,
-        [sessionId, challengeId]
-      );
-    }
-
-    for (const challengeId of incorrectAnswers) {
-      await connection.execute(
-        `INSERT INTO session_challenges (session_id, challenge_id, correct) 
-         VALUES (?, ?, false)`,
-        [sessionId, challengeId]
-      );
-    }
-
-    // 6. ✅ Guardar métricas y logros
-    console.log("💾 DEBUG - Guardando en session_scores...");
-    await ScoringService.saveSessionScore(
-      userId,
-      sessionId,
-      sessionResults,
-      points
-    );
-
-    console.log("📈 DEBUG - Actualizando user_metrics...");
-    // ✅ CAMBIO: Pasar la conexión y recibir logros
-    const newAchievements = await ScoringService.updateUserMetrics(
-      userId,
-      sessionResults,
-      points,
-      connection // ← Pasar la conexión para transacción
-    );
-
-    console.log("🏆 DEBUG - Logros otorgados:", newAchievements);
-
-    await connection.commit();
-
-    console.log("✅ DEBUG - Todo guardado exitosamente");
-
-    // ✅ CAMBIO: Incluir logros en la respuesta
-    res.json({
-      success: true,
-      points: points,
-      accuracy: accuracy,
-      achievements: newAchievements, // ← Nuevo
-    });
-  } catch (error) {
-    console.error("❌ ERROR en save-results:", error);
-    await connection.rollback();
-    res.status(500).json({
-      error: "Error al guardar resultados",
-      details: error.message,
-    });
-  } finally {
-    connection.release();
-  }
-});
-
-router.get("/user-themes/:userId", async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const connection = await pool.getConnection();
-
-    const [themes] = await connection.execute(
-      `SELECT DISTINCT theme FROM questions WHERE user_id = ? AND theme IS NOT NULL AND theme != ''`,
-      [userId]
-    );
-
-    connection.release();
-    res.json({ themes: themes.map((t) => t.theme) });
-  } catch (error) {
-    console.error("Error fetching user themes:", error);
-    res.status(500).json({ error: "Error al obtener temas" });
-  }
-});
-
-router.post("/continue-survival", async (req, res) => {
-  try {
-    const { sessionId, userId, theme, usedChallengeIds } = req.body;
-
-    const connection = await pool.getConnection();
-
-    // Generar nuevos retos (excluyendo los ya usados)
-    const [newChallenges] = await connection.execute(
-      `SELECT id, theme, question, options, correct_answer 
-       FROM questions 
-       WHERE user_id = ? AND theme LIKE ? 
-       AND id NOT IN (?)
-       ORDER BY RAND() 
-       LIMIT 5`, // Nueva tanda de 5 retos
-      [
-        userId,
-        `%${theme}%`,
-        usedChallengeIds.length > 0 ? usedChallengeIds : [0],
-      ]
-    );
-
-    if (newChallenges.length === 0) {
-      connection.release();
-      return res.status(404).json({ error: "No hay más retos disponibles" });
-    }
-
-    connection.release();
-
-    res.json({
-      newChallenges: newChallenges.map((c) => ({
-        ...c,
-        options: JSON.parse(c.options),
-      })),
-    });
-  } catch (error) {
-    console.error("Error continuing survival session:", error);
-    res
-      .status(500)
-      .json({ error: "Error al continuar sesión de supervivencia" });
-  }
-});
+/**
+ * @swagger
+ * /intensive/continue-survival:
+ *   post:
+ *     summary: Continuar modo supervivencia
+ *     tags: [Intensive Mode]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sessionId
+ *               - userId
+ *             properties:
+ *               sessionId:
+ *                 type: integer
+ *                 example: 123
+ *               userId:
+ *                 type: integer
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Modo supervivencia continuado
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Modo supervivencia continuado
+ *                 nextQuestion:
+ *                   $ref: '#/components/schemas/Challenge'
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       404:
+ *         $ref: '#/components/responses/NotFoundError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
+router.post("/continue-survival", validateContinueSurvival, intensiveController.continueSurvival);
 
 module.exports = router;

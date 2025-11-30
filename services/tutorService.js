@@ -1,6 +1,16 @@
-const groq = new (require("groq-sdk"))({ apiKey: process.env.GROQ_API_KEY });
+const { groq, MODELS, TEMPERATURE } = require("../config/groq");
 
+/**
+ * Servicio para generar recomendaciones personalizadas del tutor IA
+ * Analiza las métricas del usuario y proporciona consejos de estudio
+ */
 class TutorService {
+  /**
+   * Genera recomendaciones del tutor basadas en las métricas del usuario
+   * @param {number} userId - ID del usuario
+   * @param {string} timeRange - Rango temporal para análisis ('day', 'week', 'month')
+   * @returns {Promise<Object>} Objeto con análisis, recomendaciones, objetivos y mensaje motivacional
+   */
   async generateTutorAdvice(userId, timeRange = "week") {
     try {
       // 1️⃣ Obtener métricas
@@ -12,8 +22,8 @@ class TutorService {
       // 3️⃣ Enviar al modelo
       const completion = await groq.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
-        model: "openai/gpt-oss-120b",
-        temperature: 0.7,
+        model: MODELS.GPT_OSS,
+        temperature: TEMPERATURE.BALANCED,
         max_tokens: 800,
       });
 
@@ -72,6 +82,11 @@ class TutorService {
     }
   }
 
+  /**
+   * Intenta extraer información estructurada de un JSON corrupto o mal formateado
+   * @param {string} rawText - Texto JSON corrupto desde el modelo de IA
+   * @returns {Object} Objeto con datos extraídos (analysis, strengths, weaknesses, recommendations)
+   */
   // Nuevo método para extraer datos de JSON corrupto
   extractFromCorruptedJSON(rawText) {
     const extracted = {
@@ -121,6 +136,11 @@ class TutorService {
     return extracted;
   }
 
+  /**
+   * Valida y completa la estructura del consejo del tutor con valores por defecto
+   * @param {Object} advice - Objeto de consejo potencialmente incompleto
+   * @returns {Object} Objeto de consejo validado y completo
+   */
   // Método para validar y completar la estructura
   validateAndCompleteAdvice(advice) {
     const defaultAdvice = this.getFallbackAdvice();
@@ -143,115 +163,58 @@ class TutorService {
     };
   }
 
-  // services/tutorService.js - ACTUALIZA getUserMetrics
+  /**
+   * Obtiene las métricas completas del usuario desde los repositorios
+   * @param {number} userId - ID del usuario
+   * @param {string} timeRange - Rango temporal ('day', 'week', 'month')
+   * @returns {Promise<Object>} Objeto con estadísticas de respuestas, sesiones intensivas y temas débiles
+   */
   async getUserMetrics(userId, timeRange) {
-    const connection = await require("../config/db").getConnection();
+    const metricsRepository = require("../repositories/metricsRepository");
+    const sessionRepository = require("../repositories/sessionRepository");
 
-    // 1. Obtener estadísticas de retos normales (ya lo tienes)
-    const [responseStats] = await connection.execute(
-      `
-    SELECT 
-      COUNT(*) as total_questions,
-      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
-      AVG(CASE WHEN ur.is_correct = 1 THEN ur.response_time ELSE NULL END) as avg_correct_time,
-      AVG(CASE WHEN ur.is_correct = 0 THEN ur.response_time ELSE NULL END) as avg_incorrect_time,
-      q.theme,
-      COUNT(DISTINCT q.theme) as themes_count
-    FROM user_responses ur
-    JOIN questions q ON ur.question_id = q.id
-    WHERE ur.user_id = ? 
-      AND ur.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
-    GROUP BY q.theme
-    ORDER BY correct_answers ASC
-  `,
-      [userId]
+    // 1. Obtener estadísticas de respuestas del usuario
+    const responseStats = await metricsRepository.getUserResponseStats(userId, timeRange);
+
+    // 2. Obtener estadísticas del modo intensivo
+    const intensiveStats = await metricsRepository.getIntensiveStats(userId, timeRange);
+
+    // 3. Obtener sesiones intensivas recientes
+    const recentSessions = await sessionRepository.getRecentIntensiveSessions(userId, 5);
+
+    // 4. Obtener temas con mayor dificultad
+    const weakThemes = await metricsRepository.getWeakThemes(userId, 5);
+
+    // Calcular métricas agregadas
+    const totalQuestions = responseStats.reduce(
+      (sum, stat) => sum + parseInt(stat.total_questions || 0),
+      0
     );
 
-    // 2. ✅ NUEVO: Obtener estadísticas del modo intensivo
-    const [intensiveStats] = await connection.execute(
-      `
-    SELECT 
-      isess.theme,
-      isess.game_mode,
-      COUNT(*) as total_questions,
-      SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
-      AVG(ir.response_time) as avg_response_time,
-      (SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-    FROM intensive_responses ir
-    JOIN intensive_sessions isess ON ir.session_id = isess.id
-    WHERE isess.user_id = ?
-      AND ir.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
-    GROUP BY isess.theme, isess.game_mode
-    ORDER BY success_rate ASC
-  `,
-      [userId]
+    const totalCorrect = responseStats.reduce(
+      (sum, stat) => sum + parseInt(stat.correct_answers || 0),
+      0
     );
 
-    // 3. ✅ NUEVO: Obtener sesiones intensivas recientes
-    const [recentSessions] = await connection.execute(
-      `
-    SELECT 
-      theme,
-      game_mode,
-      total_questions,
-      correct_answers,
-      (correct_answers / total_questions) * 100 as accuracy,
-      time_used,
-      created_at
-    FROM intensive_sessions 
-    WHERE user_id = ?
-    ORDER BY created_at DESC 
-    LIMIT 5
-  `,
-      [userId]
-    );
-
-    // 4. Obtener temas con mayor dificultad (ya lo tienes)
-    const [weakThemes] = await connection.execute(
-      `
-    SELECT 
-      q.theme,
-      COUNT(*) as total_attempts,
-      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
-      (SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-    FROM user_responses ur
-    JOIN questions q ON ur.question_id = q.id
-    WHERE ur.user_id = ?
-    GROUP BY q.theme
-    HAVING total_attempts >= 3
-    ORDER BY success_rate ASC
-    LIMIT 5
-  `,
-      [userId]
-    );
-
-    connection.release();
+    const overallAccuracy =
+      totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
 
     return {
       responseStats,
-      intensiveStats, // ← NUEVO
-      recentSessions, // ← NUEVO
+      intensiveStats,
+      recentSessions,
       weakThemes,
       timeRange,
-      totalQuestions: responseStats.reduce(
-        (sum, stat) => sum + parseInt(stat.total_questions),
-        0
-      ),
-      overallAccuracy:
-        responseStats.length > 0
-          ? (responseStats.reduce(
-              (sum, stat) => sum + parseInt(stat.correct_answers),
-              0
-            ) /
-              responseStats.reduce(
-                (sum, stat) => sum + parseInt(stat.total_questions),
-                0
-              )) *
-            100
-          : 0,
+      totalQuestions,
+      overallAccuracy,
     };
   }
 
+  /**
+   * Construye el prompt para el modelo de IA con las métricas del usuario
+   * @param {Object} metrics - Métricas del usuario (precisión, preguntas, temas débiles)
+   * @returns {string} Prompt formateado para el modelo de IA
+   */
   // ACTUALIZA buildTutorPrompt para incluir datos intensivos
   buildTutorPrompt(metrics) {
     return `
@@ -286,6 +249,12 @@ RESPONDE EXCLUSIVAMENTE CON ESTE FORMATO JSON:
 No incluyas ningún otro texto fuera del JSON.`;
   }
 
+  /**
+   * Parsea la respuesta del tutor desde el modelo de IA
+   * @param {string} response - Respuesta en texto del modelo
+   * @returns {Object} Objeto parseado o consejo fallback si hay error
+   * @deprecated Este método ya no se usa, parseado se realiza directamente en generateTutorAdvice
+   */
   //   buildTutorPrompt(metrics) {
   //     return `
   // Eres un tutor educativo inteligente. Analiza las siguientes métricas de aprendizaje del estudiante y proporciona:
@@ -325,6 +294,12 @@ No incluyas ningún otro texto fuera del JSON.`;
   // Sé específico, constructivo y motivador.`;
   //   }
 
+  /**
+   * Parsea la respuesta del tutor desde el modelo de IA
+   * @param {string} response - Respuesta en texto del modelo
+   * @returns {Object} Objeto parseado o consejo fallback si hay error
+   * @deprecated Este método ya no se usa, parseado se realiza directamente en generateTutorAdvice
+   */
   parseTutorResponse(response) {
     try {
       // Limpia el response si viene con markdown
@@ -337,6 +312,10 @@ No incluyas ningún otro texto fuera del JSON.`;
     }
   }
 
+  /**
+   * Proporciona un consejo genérico cuando no hay suficientes datos o hay un error
+   * @returns {Object} Consejo fallback con estructura completa
+   */
   getFallbackAdvice() {
     return {
       analysis:
