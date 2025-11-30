@@ -1,7 +1,15 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const challengeController = require('../controllers/challengeController');
-const pendingChallengesController = require('../controllers/pendingChallengesController');
+const challengeController = require("../controllers/challengeController");
+const pendingChallengesController = require("../controllers/pendingChallengesController");
+const {
+  validateChallengeGeneration,
+  validateGroqGeneration,
+  validateFromNotesGeneration,
+  validateChallengeResponse,
+  validateIntensiveResponse,
+  validateStartChallenge,
+} = require("../middlewares/validators/challengeValidator");
 
 // Generación de retos
 router.post('/generate', challengeController.generateChallenge);
