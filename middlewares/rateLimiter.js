@@ -47,14 +47,14 @@ const skipRateLimitInDev = (req) => {
 
 /**
  * Rate Limiter para endpoints de autenticación
- * Más restrictivo para prevenir ataques de fuerza bruta
+ * Balance entre seguridad y usabilidad
  * 
- * Límite: 5 peticiones por 15 minutos
+ * Límite: 20 peticiones por 15 minutos
  * Aplicar a: /auth/login, /auth/register
  */
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 peticiones
+  max: 20, // 20 peticiones (suficiente para testing, seguro contra brute force)
   message: 'Demasiados intentos de autenticación. Por favor intenta en 15 minutos.',
   standardHeaders: true, // Retornar info en headers `RateLimit-*`
   legacyHeaders: false, // Deshabilitar headers `X-RateLimit-*`
