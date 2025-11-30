@@ -21,11 +21,26 @@ CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 -- Índice para queries por tema
 CREATE INDEX IF NOT EXISTS idx_questions_theme ON questions(theme);
 
--- Índice para queries por dificultad
-CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON questions(difficulty);
+-- Índice para queries por nivel (difficulty)
+CREATE INDEX IF NOT EXISTS idx_questions_level ON questions(level);
 
--- Índice compuesto para queries por tema y dificultad
-CREATE INDEX IF NOT EXISTS idx_questions_theme_difficulty ON questions(theme, difficulty);
+-- Índice compuesto para queries por tema y nivel
+CREATE INDEX IF NOT EXISTS idx_questions_theme_level ON questions(theme, level);
+
+-- Índice para queries por usuario (preguntas personalizadas)
+CREATE INDEX IF NOT EXISTS idx_questions_user_id ON questions(user_id);
+
+-- Índice para queries por estado activo
+CREATE INDEX IF NOT EXISTS idx_questions_is_active ON questions(is_active);
+
+-- Índice para queries por estado de visualización
+CREATE INDEX IF NOT EXISTS idx_questions_display_status ON questions(display_status);
+
+-- Índice para queries por próxima entrega (scheduler)
+CREATE INDEX IF NOT EXISTS idx_questions_next_delivery ON questions(next_delivery);
+
+-- Índice para queries por hora de entrega
+CREATE INDEX IF NOT EXISTS idx_questions_delivery_time ON questions(delivery_time);
 
 -- ========================================
 -- TABLA: user_responses
@@ -133,9 +148,9 @@ CREATE INDEX IF NOT EXISTS idx_session_scores_user ON session_scores(user_id);
    - Mejora: 10-50x en queries de login/registro
    - Uso: Autenticación, verificación de unicidad
 
-2. questions (theme, difficulty):
-   - Mejora: 5-20x en generación de desafíos
-   - Uso: Selección de preguntas para modo intensivo
+2. questions (theme, level, user_id, is_active, display_status, next_delivery, delivery_time):
+   - Mejora: 5-20x en generación de desafíos y scheduler
+   - Uso: Selección de preguntas, entrega diaria, filtros por estado
 
 3. user_responses (user_id, created_at, is_correct):
    - Mejora: 10-100x en queries de métricas
