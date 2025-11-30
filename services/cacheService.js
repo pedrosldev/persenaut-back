@@ -1,4 +1,4 @@
-const { redisClient } = require('../config/redis');
+const { redisClient, REDIS_ENABLED } = require('../config/redis');
 const { logger, logPerformance } = require('../config/logger');
 
 /**
@@ -40,6 +40,8 @@ const CacheService = {
    * @returns {Promise<any|null>} Valor parseado o null si no existe
    */
   async get(key) {
+    if (!REDIS_ENABLED) return null; // Sin Redis, siempre cache miss
+    
     const startTime = Date.now();
     try {
       const value = await redisClient.get(key);
@@ -71,6 +73,8 @@ const CacheService = {
    * @returns {Promise<boolean>} true si se guardó exitosamente
    */
   async set(key, value, ttl = TTL.MEDIUM) {
+    if (!REDIS_ENABLED) return false; // Sin Redis, no cachear
+    
     const startTime = Date.now();
     try {
       const serialized = JSON.stringify(value);
@@ -94,6 +98,8 @@ const CacheService = {
    * @returns {Promise<boolean>} true si se eliminó
    */
   async delete(key) {
+    if (!REDIS_ENABLED) return false;
+    
     try {
       const result = await redisClient.del(key);
       logger.info('Cache DELETE', { key, deleted: result > 0 });
@@ -110,6 +116,8 @@ const CacheService = {
    * @returns {Promise<number>} Número de keys eliminadas
    */
   async deletePattern(pattern) {
+    if (!REDIS_ENABLED) return 0;
+    
     try {
       const keys = await redisClient.keys(pattern);
       if (keys.length === 0) return 0;

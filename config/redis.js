@@ -3,7 +3,13 @@ const Redis = require('ioredis');
 /**
  * Configuración de Redis Client con manejo de conexión robusto
  * Incluye: connection pooling, auto-reconnect, error handling, health checks
+ * 
+ * ⚠️ REDIS_ENABLED: Controla si Redis está activo
+ * - false: Modo fallback (sin Redis, sin caché, rate limits en memoria)
+ * - true: Modo completo (Redis con caché y rate limits persistentes)
  */
+
+const REDIS_ENABLED = process.env.REDIS_ENABLED !== 'false'; // Default: true
 
 // Configuración de opciones de Redis
 const redisOptions = {
@@ -38,39 +44,65 @@ const redisOptions = {
 
 /**
  * Crear cliente de Redis con manejo de eventos
+ * Si REDIS_ENABLED=false, crea un cliente mock
  */
-const redisClient = new Redis(redisOptions);
+let redisClient;
 
-// Event: Conexión exitosa
-redisClient.on('connect', () => {
-  console.log('✅ Redis: Conectado al servidor');
-});
+if (REDIS_ENABLED) {
+  redisClient = new Redis(redisOptions);
 
-// Event: Listo para recibir comandos
-redisClient.on('ready', () => {
-  console.log('🚀 Redis: Cliente listo para recibir comandos');
-});
+  // Event: Conexión exitosa
+  redisClient.on('connect', () => {
+    console.log('✅ Redis: Conectado al servidor');
+  });
 
-// Event: Error en conexión
-redisClient.on('error', (err) => {
-  console.error('❌ Redis Error:', err.message);
-});
+  // Event: Listo para recibir comandos
+  redisClient.on('ready', () => {
+    console.log('🚀 Redis: Cliente listo para recibir comandos');
+  });
 
-// Event: Reconexión
-redisClient.on('reconnecting', () => {
-  console.log('🔄 Redis: Reconectando...');
-});
+  // Event: Error en conexión
+  redisClient.on('error', (err) => {
+    console.error('❌ Redis Error:', err.message);
+  });
+} else {
+  console.warn('⚠️ Redis DESACTIVADO - Usando modo fallback (sin caché, rate limits en memoria)');
+  
+  // Mock client (no-op) para evitar errores cuando Redis está desactivado
+  redisClient = {
+    get: async () => null,
+    set: async () => 'OK',
+    del: async () => 0,
+    keys: async () => [],
+    expire: async () => 0,
+    ttl: async () => -1,
+    ping: async () => { throw new Error('Redis disabled'); },
+    quit: async () => 'OK',
+    call: async () => { throw new Error('Redis disabled'); },
+  };
+}
 
-// Event: Desconexión
-redisClient.on('close', () => {
-  console.log('⚠️ Redis: Conexión cerrada');
-});
+// Event: Reconexión (solo si Redis está habilitado)
+if (REDIS_ENABLED) {
+  redisClient.on('reconnecting', () => {
+    console.log('🔄 Redis: Reconectando...');
+  });
+
+  // Event: Desconexión
+  redisClient.on('close', () => {
+    console.log('⚠️ Redis: Conexión cerrada');
+  });
+}
 
 /**
  * Health check: Verificar si Redis está disponible
  * @returns {Promise<boolean>} true si Redis responde, false si falla
  */
 async function isRedisHealthy() {
+  if (!REDIS_ENABLED) {
+    return false; // Redis desactivado intencionalmente
+  }
+  
   try {
     const result = await redisClient.ping();
     return result === 'PONG';
@@ -84,6 +116,10 @@ async function isRedisHealthy() {
  * Graceful shutdown: Cerrar conexión de Redis limpiamente
  */
 async function closeRedis() {
+  if (!REDIS_ENABLED) {
+    return; // No hay conexión que cerrar
+  }
+  
   try {
     await redisClient.quit();
     console.log('✅ Redis: Conexión cerrada correctamente');
@@ -108,5 +144,6 @@ process.on('SIGTERM', async () => {
 module.exports = {
   redisClient,
   isRedisHealthy,
-  closeRedis
+  closeRedis,
+  REDIS_ENABLED
 };

@@ -1,20 +1,13 @@
 const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis').default;
+const { redisClient, REDIS_ENABLED } = require('../config/redis');
 const { logger } = require('../config/logger');
 
 /**
- * Middleware de Rate Limiting con Memory Store (fallback si Redis no disponible)
+ * Middleware de Rate Limiting con Redis Store
  * Previene abuso de API y ataques de fuerza bruta
  * Estrategia: Diferentes límites por tipo de endpoint
- * 
- * NOTA: Usando memory store por defecto. Para usar Redis en producción:
- * 1. Iniciar Redis: docker run -p 6379:6379 -d redis:7-alpine
- * 2. Descomentar imports de RedisStore y redisClient
- * 3. Reemplazar store en cada limiter
  */
-
-// OPCIONAL: Descomentar para usar Redis Store
-// const RedisStore = require('rate-limit-redis').default;
-// const { redisClient } = require('../config/redis');
 
 /**
  * Handler personalizado para cuando se excede el límite
@@ -68,12 +61,13 @@ const authLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // Para usar Redis, descomentar:
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:auth:',
-  // }),
+  // Redis store (solo si está habilitado, sino memory store)
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:auth:',
+    }),
+  }),
 
   keyGenerator: (req) => {
     // Para auth, siempre usar IP (prevenir múltiples cuentas)
@@ -97,11 +91,12 @@ const apiLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:api:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:api:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -122,11 +117,12 @@ const intensiveLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:intensive:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:intensive:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -147,11 +143,12 @@ const aiGenerationLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:ai:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:ai:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -172,11 +169,12 @@ const tutorLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:tutor:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:tutor:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -197,11 +195,12 @@ const metricsLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:metrics:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:metrics:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -221,11 +220,12 @@ const globalLimiter = rateLimit({
   handler: rateLimitHandler,
   skip: skipRateLimitInDev,
   
-  // Memory store (fallback cuando Redis no está disponible)
-  // store: new RedisStore({
-  //   sendCommand: (...args) => redisClient.call(...args),
-  //   prefix: 'rl:global:',
-  // }),
+  ...(REDIS_ENABLED && {
+    store: new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: 'rl:global:',
+    }),
+  }),
   
   keyGenerator
 });
@@ -239,19 +239,17 @@ const globalLimiter = rateLimit({
  */
 async function resetRateLimit(identifier, prefix = 'api') {
   try {
-    // Descomentar cuando uses Redis:
-    // const { redisClient } = require('../config/redis');
-    // const key = `rl:${prefix}:ratelimit:${identifier}:*`;
-    // const keys = await redisClient.keys(key);
-    // 
-    // if (keys.length > 0) {
-    //   await redisClient.del(...keys);
-    //   logger.info('Rate limit reset', { identifier, prefix, keysDeleted: keys.length });
-    //   return true;
-    // }
+    const key = `rl:${prefix}:${identifier}`;
+    const keys = await redisClient.keys(`${key}:*`);
     
-    logger.warn('resetRateLimit requires Redis. Using memory store - rate limits cannot be reset programmatically.');
-    return false;
+    if (keys.length > 0) {
+      await redisClient.del(...keys);
+      logger.info('Rate limit reset', { identifier, prefix, keysDeleted: keys.length });
+      return true;
+    }
+    
+    logger.info('No rate limit keys found to reset', { identifier, prefix });
+    return true;
   } catch (error) {
     logger.error('Failed to reset rate limit', { identifier, prefix, error: error.message });
     return false;

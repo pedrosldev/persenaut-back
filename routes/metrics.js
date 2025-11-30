@@ -1,8 +1,8 @@
 // routes/metrics.js
 const express = require("express");
 const router = express.Router();
-const MetricsService = require("../services/metricsService"); // ← Import CORRECTO
-// const CacheService = require("../services/cacheService"); // Deshabilitado: requiere Redis
+const MetricsService = require("../services/metricsService");
+const CacheService = require("../services/cacheService");
 const { logger } = require("../config/logger");
 
 /**
@@ -40,8 +40,11 @@ router.get("/user/:userId/metrics/overall", async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Sin caché (requiere Redis - agregar CacheService cuando Redis esté disponible)
-    const metrics = await MetricsService.getUserOverallMetrics(userId);
+    const metrics = await CacheService.getOrSet(
+      `metrics:user:${userId}:overall`,
+      () => MetricsService.getUserOverallMetrics(userId),
+      CacheService.TTL.MEDIUM
+    );
     
     res.json(metrics || {});
   } catch (error) {
@@ -94,10 +97,13 @@ router.get("/user/:userId/metrics/sessions", async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Sin caché (requiere Redis)
-    const sessions = await MetricsService.getUserSessions(userId);
+    const sessions = await CacheService.getOrSet(
+      `sessions:user:${userId}`,
+      () => MetricsService.getUserSessions(userId),
+      CacheService.TTL.SHORT
+    );
     
-    res.json(sessions);
+    res.json(sessions || []);
   } catch (error) {
     logger.error('Error fetching user sessions', { userId: req.params.userId, error: error.message });
     res.status(500).json({ error: error.message });
@@ -167,8 +173,11 @@ router.get("/user/:userId/metrics/themes", async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Sin caché (requiere Redis)
-    const themes = await MetricsService.getUserThemeProgress(userId);
+    const themes = await CacheService.getOrSet(
+      `themes:user:${userId}`,
+      () => MetricsService.getUserThemeProgress(userId),
+      CacheService.TTL.MEDIUM
+    );
     
     res.json(themes);
   } catch (error) {
@@ -236,8 +245,11 @@ router.get("/user/:userId/metrics/timeline", async (req, res) => {
     const { userId } = req.params;
     const { days = 30 } = req.query;
     
-    // Sin caché (requiere Redis)
-    const timeline = await MetricsService.getUserProgressTimeline(userId, parseInt(days));
+    const timeline = await CacheService.getOrSet(
+      `timeline:user:${userId}:${days}`,
+      () => MetricsService.getUserProgressTimeline(userId, parseInt(days)),
+      CacheService.TTL.MEDIUM
+    );
     
     res.json(timeline);
   } catch (error) {
@@ -301,8 +313,11 @@ router.get("/user/:userId/metrics/game-modes", async (req, res) => {
   try {
     const { userId } = req.params;
     
-    // Sin caché (requiere Redis)
-    const stats = await MetricsService.getUserGameModeStats(userId);
+    const stats = await CacheService.getOrSet(
+      `game-modes:user:${userId}`,
+      () => MetricsService.getUserGameModeStats(userId),
+      CacheService.TTL.MEDIUM
+    );
     
     res.json(stats);
   } catch (error) {
