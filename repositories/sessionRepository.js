@@ -112,6 +112,33 @@ class SessionRepository {
       connection.release();
     }
   }
+
+  /**
+   * Obtiene sesiones intensivas recientes del usuario
+   */
+  async getRecentIntensiveSessions(userId, limit = 5) {
+    const connection = await pool.getConnection();
+    try {
+      const [sessions] = await connection.execute(
+        `SELECT 
+          theme,
+          game_mode,
+          total_questions,
+          correct_answers,
+          (correct_answers / total_questions) * 100 as accuracy,
+          time_used,
+          created_at
+         FROM intensive_sessions 
+         WHERE user_id = ?
+         ORDER BY created_at DESC 
+         LIMIT ?`,
+        [userId, limit]
+      );
+      return sessions;
+    } finally {
+      connection.release();
+    }
+  }
 }
 
 module.exports = new SessionRepository();

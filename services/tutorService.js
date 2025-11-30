@@ -143,112 +143,44 @@ class TutorService {
     };
   }
 
-  // services/tutorService.js - ACTUALIZA getUserMetrics
   async getUserMetrics(userId, timeRange) {
-    const connection = await require("../config/db").getConnection();
+    const metricsRepository = require("../repositories/metricsRepository");
+    const sessionRepository = require("../repositories/sessionRepository");
 
-    // 1. Obtener estadísticas de retos normales (ya lo tienes)
-    const [responseStats] = await connection.execute(
-      `
-    SELECT 
-      COUNT(*) as total_questions,
-      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
-      AVG(CASE WHEN ur.is_correct = 1 THEN ur.response_time ELSE NULL END) as avg_correct_time,
-      AVG(CASE WHEN ur.is_correct = 0 THEN ur.response_time ELSE NULL END) as avg_incorrect_time,
-      q.theme,
-      COUNT(DISTINCT q.theme) as themes_count
-    FROM user_responses ur
-    JOIN questions q ON ur.question_id = q.id
-    WHERE ur.user_id = ? 
-      AND ur.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
-    GROUP BY q.theme
-    ORDER BY correct_answers ASC
-  `,
-      [userId]
+    // 1. Obtener estadísticas de respuestas del usuario
+    const responseStats = await metricsRepository.getUserResponseStats(userId);
+
+    // 2. Obtener estadísticas del modo intensivo
+    const intensiveStats = await metricsRepository.getIntensiveStats(userId);
+
+    // 3. Obtener sesiones intensivas recientes
+    const recentSessions = await sessionRepository.getRecentIntensiveSessions(userId, 5);
+
+    // 4. Obtener temas con mayor dificultad
+    const weakThemes = await metricsRepository.getWeakThemes(userId, 5);
+
+    // Calcular métricas agregadas
+    const totalQuestions = responseStats.reduce(
+      (sum, stat) => sum + parseInt(stat.total_questions || 0),
+      0
     );
 
-    // 2. ✅ NUEVO: Obtener estadísticas del modo intensivo
-    const [intensiveStats] = await connection.execute(
-      `
-    SELECT 
-      isess.theme,
-      isess.game_mode,
-      COUNT(*) as total_questions,
-      SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) as correct_answers,
-      AVG(ir.response_time) as avg_response_time,
-      (SUM(CASE WHEN ir.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-    FROM intensive_responses ir
-    JOIN intensive_sessions isess ON ir.session_id = isess.id
-    WHERE isess.user_id = ?
-      AND ir.created_at >= DATE_SUB(NOW(), INTERVAL 1 ${timeRange.toUpperCase()})
-    GROUP BY isess.theme, isess.game_mode
-    ORDER BY success_rate ASC
-  `,
-      [userId]
+    const totalCorrect = responseStats.reduce(
+      (sum, stat) => sum + parseInt(stat.correct_answers || 0),
+      0
     );
 
-    // 3. ✅ NUEVO: Obtener sesiones intensivas recientes
-    const [recentSessions] = await connection.execute(
-      `
-    SELECT 
-      theme,
-      game_mode,
-      total_questions,
-      correct_answers,
-      (correct_answers / total_questions) * 100 as accuracy,
-      time_used,
-      created_at
-    FROM intensive_sessions 
-    WHERE user_id = ?
-    ORDER BY created_at DESC 
-    LIMIT 5
-  `,
-      [userId]
-    );
-
-    // 4. Obtener temas con mayor dificultad (ya lo tienes)
-    const [weakThemes] = await connection.execute(
-      `
-    SELECT 
-      q.theme,
-      COUNT(*) as total_attempts,
-      SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
-      (SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-    FROM user_responses ur
-    JOIN questions q ON ur.question_id = q.id
-    WHERE ur.user_id = ?
-    GROUP BY q.theme
-    HAVING total_attempts >= 3
-    ORDER BY success_rate ASC
-    LIMIT 5
-  `,
-      [userId]
-    );
-
-    connection.release();
+    const overallAccuracy =
+      totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
 
     return {
       responseStats,
-      intensiveStats, // ← NUEVO
-      recentSessions, // ← NUEVO
+      intensiveStats,
+      recentSessions,
       weakThemes,
       timeRange,
-      totalQuestions: responseStats.reduce(
-        (sum, stat) => sum + parseInt(stat.total_questions),
-        0
-      ),
-      overallAccuracy:
-        responseStats.length > 0
-          ? (responseStats.reduce(
-              (sum, stat) => sum + parseInt(stat.correct_answers),
-              0
-            ) /
-              responseStats.reduce(
-                (sum, stat) => sum + parseInt(stat.total_questions),
-                0
-              )) *
-            100
-          : 0,
+      totalQuestions,
+      overallAccuracy,
     };
   }
 
