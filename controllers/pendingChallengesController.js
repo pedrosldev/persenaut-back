@@ -1,4 +1,4 @@
-const pool = require('../config/db');
+const challengeRepository = require('../repositories/challengeRepository');
 
 /**
  * Controlador para gestión de retos pendientes
@@ -12,20 +12,7 @@ class PendingChallengesController {
     const { userId } = req.body;
 
     try {
-      const connection = await pool.getConnection();
-      
-      const [challenges] = await connection.execute(
-        `SELECT id, theme, level, question, options, correct_answer, 
-                display_status, frequency, created_at
-         FROM questions 
-         WHERE user_id = ? 
-         AND display_status = 'pending'
-         AND is_active = false
-         ORDER BY created_at DESC`,
-        [userId]
-      );
-
-      connection.release();
+      const challenges = await challengeRepository.findPendingByUser(userId);
 
       res.json({
         success: true,
@@ -47,14 +34,7 @@ class PendingChallengesController {
     const { challengeId } = req.body;
 
     try {
-      const connection = await pool.getConnection();
-      
-      await connection.execute(
-        `UPDATE questions SET display_status = 'active' WHERE id = ?`,
-        [challengeId]
-      );
-
-      connection.release();
+      await challengeRepository.updateDisplayStatus(challengeId, 'active');
 
       res.json({
         success: true,

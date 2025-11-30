@@ -1,6 +1,7 @@
-const pool = require('../config/db');
 const { groq, MODELS, TEMPERATURE } = require('../config/groq');
 const { generatePrompt, formatQuestion } = require('../services/promptService');
+const challengeRepository = require('../repositories/challengeRepository');
+const userRepository = require('../repositories/userRepository');
 
 /**
  * Controlador para la generación de retos/preguntas
@@ -46,24 +47,18 @@ class ChallengeController {
 
       // 4. Guardar en la base de datos si hay userId
       if (userId) {
-        const connection = await pool.getConnection();
-        const [result] = await connection.execute(
-          `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [
-            theme,
-            level,
-            formattedQuestion.questionText,
-            JSON.stringify(formattedQuestion.options),
-            formattedQuestion.correctAnswer,
-            responseText,
-            userId,
-            preferences.deliveryTime || "09:00:00",
-            preferences.frequency || "daily",
-            true,
-          ]
-        );
-        connection.release();
+        const questionId = await challengeRepository.save({
+          theme,
+          level,
+          question: formattedQuestion.questionText,
+          options: formattedQuestion.options,
+          correctAnswer: formattedQuestion.correctAnswer,
+          rawResponse: responseText,
+          userId,
+          deliveryTime: preferences.deliveryTime,
+          frequency: preferences.frequency,
+          isActive: true,
+        });
 
         // 5. Devolver respuesta completa
         return res.json({
@@ -71,7 +66,7 @@ class ChallengeController {
           question: formattedQuestion,
           rawResponse: responseText,
           promptUsed: prompt,
-          savedQuestionId: result.insertId,
+          savedQuestionId: questionId,
           message: "Pregunta generada y guardada correctamente",
         });
       } else {
@@ -142,31 +137,25 @@ class ChallengeController {
 
       // 4. Guardar en BD solo si hay userId y es programado
       if (userId && preferences.scheduleType === "scheduled") {
-        const connection = await pool.getConnection();
-        const [result] = await connection.execute(
-          `INSERT INTO questions (theme, level, question, options, correct_answer, raw_response, user_id, delivery_time, frequency, is_active, created_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [
-            theme,
-            level,
-            formattedQuestion.questionText,
-            JSON.stringify(formattedQuestion.options),
-            formattedQuestion.correctAnswer,
-            responseText,
-            userId,
-            preferences.deliveryTime || "09:00:00",
-            preferences.frequency,
-            true,
-          ]
-        );
-        connection.release();
+        const questionId = await challengeRepository.save({
+          theme,
+          level,
+          question: formattedQuestion.questionText,
+          options: formattedQuestion.options,
+          correctAnswer: formattedQuestion.correctAnswer,
+          rawResponse: responseText,
+          userId,
+          deliveryTime: preferences.deliveryTime,
+          frequency: preferences.frequency,
+          isActive: true,
+        });
 
         return res.json({
           success: true,
           question: formattedQuestion,
           rawResponse: responseText,
           promptUsed: prompt,
-          savedQuestionId: result.insertId,
+          savedQuestionId: questionId,
           message: "Reto generado desde apuntes y guardado correctamente",
         });
       } else {
@@ -191,36 +180,30 @@ class ChallengeController {
     const { userId, questionId, selectedAnswer, responseTime } = req.body;
 
     try {
-      const connection = await pool.getConnection();
-      
       // Obtener la respuesta correcta
-      const [question] = await connection.execute(
-        'SELECT correct_answer FROM questions WHERE id = ?',
-        [questionId]
-      );
+      const correctAnswer = await challengeRepository.getCorrectAnswer(questionId);
 
-      if (question.length === 0) {
-        connection.release();
+      if (!correctAnswer) {
         const error = new Error("Pregunta no encontrada");
         error.type = 'NotFoundError';
         throw error;
       }
 
-      const isCorrect = selectedAnswer === question[0].correct_answer;
+      const isCorrect = selectedAnswer === correctAnswer;
 
       // Guardar la respuesta
-      const [result] = await connection.execute(
-        `INSERT INTO user_responses (user_id, question_id, selected_answer, is_correct, response_time) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [userId, questionId, selectedAnswer, isCorrect, responseTime]
-      );
-
-      connection.release();
+      const responseId = await userRepository.saveUserResponse({
+        userId,
+        questionId,
+        selectedAnswer,
+        isCorrect,
+        responseTime
+      });
 
       res.json({
         success: true,
         isCorrect,
-        savedResponseId: result.insertId
+        savedResponseId: responseId
       });
     } catch (error) {
       next(error);
@@ -235,33 +218,29 @@ class ChallengeController {
     const { sessionId, questionId, selectedAnswer, isCorrect, responseTime } = req.body;
 
     try {
-      const connection = await pool.getConnection();
+      const sessionRepository = require('../repositories/sessionRepository');
       
       // Verificar que la sesión existe
-      const [session] = await connection.execute(
-        'SELECT id FROM intensive_sessions WHERE id = ?',
-        [sessionId]
-      );
+      const sessionExists = await sessionRepository.exists(sessionId);
 
-      if (session.length === 0) {
-        connection.release();
+      if (!sessionExists) {
         const error = new Error("Sesión intensiva no encontrada");
         error.type = 'NotFoundError';
         throw error;
       }
 
       // Guardar la respuesta individual
-      const [result] = await connection.execute(
-        `INSERT INTO intensive_responses (session_id, question_id, selected_answer, is_correct, response_time) 
-         VALUES (?, ?, ?, ?, ?)`,
-        [sessionId, questionId, selectedAnswer, isCorrect, responseTime]
-      );
-
-      connection.release();
+      const responseId = await userRepository.saveIntensiveResponse({
+        sessionId,
+        questionId,
+        selectedAnswer,
+        isCorrect,
+        responseTime
+      });
 
       res.json({
         success: true,
-        savedResponseId: result.insertId,
+        savedResponseId: responseId,
         message: "Respuesta intensiva guardada correctamente"
       });
     } catch (error) {
