@@ -15,17 +15,17 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 
 -- ========================================
--- TABLA: challenges
+-- TABLA: questions
 -- ========================================
 
--- Índice compuesto para queries por usuario y tema
-CREATE INDEX IF NOT EXISTS idx_challenges_user_theme ON challenges(user_id, theme);
+-- Índice para queries por tema
+CREATE INDEX IF NOT EXISTS idx_questions_theme ON questions(theme);
 
--- Índice para queries por tema y dificultad
-CREATE INDEX IF NOT EXISTS idx_challenges_theme_difficulty ON challenges(theme, difficulty);
+-- Índice para queries por dificultad
+CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON questions(difficulty);
 
--- Índice para búsquedas por usuario (pending challenges)
-CREATE INDEX IF NOT EXISTS idx_challenges_user_id ON challenges(user_id);
+-- Índice compuesto para queries por tema y dificultad
+CREATE INDEX IF NOT EXISTS idx_questions_theme_difficulty ON questions(theme, difficulty);
 
 -- ========================================
 -- TABLA: user_responses
@@ -87,14 +87,24 @@ CREATE INDEX IF NOT EXISTS idx_achievements_user_achievement ON user_achievement
 CREATE INDEX IF NOT EXISTS idx_achievements_user_id ON user_achievements(user_id);
 
 -- ========================================
--- TABLA: pending_challenges
+-- TABLA: session_challenges
 -- ========================================
 
--- Índice compuesto para queries por usuario y estado
-CREATE INDEX IF NOT EXISTS idx_pending_user_status ON pending_challenges(user_id, status);
+-- Índice compuesto para queries por sesión y pregunta
+CREATE INDEX IF NOT EXISTS idx_session_challenges_session_question ON session_challenges(session_id, question_id);
+
+-- Índice para queries por sesión
+CREATE INDEX IF NOT EXISTS idx_session_challenges_session ON session_challenges(session_id);
+
+-- ========================================
+-- TABLA: session_scores
+-- ========================================
+
+-- Índice para queries por sesión
+CREATE INDEX IF NOT EXISTS idx_session_scores_session ON session_scores(session_id);
 
 -- Índice para queries por usuario
-CREATE INDEX IF NOT EXISTS idx_pending_user_id ON pending_challenges(user_id);
+CREATE INDEX IF NOT EXISTS idx_session_scores_user ON session_scores(user_id);
 
 -- ========================================
 -- VERIFICACIÓN DE ÍNDICES CREADOS
@@ -123,7 +133,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_user_id ON pending_challenges(user_id);
    - Mejora: 10-50x en queries de login/registro
    - Uso: Autenticación, verificación de unicidad
 
-2. challenges (user_id, theme, difficulty):
+2. questions (theme, difficulty):
    - Mejora: 5-20x en generación de desafíos
    - Uso: Selección de preguntas para modo intensivo
 
@@ -138,6 +148,14 @@ CREATE INDEX IF NOT EXISTS idx_pending_user_id ON pending_challenges(user_id);
 5. intensive_responses (session_id, question_id):
    - Mejora: 3-10x en queries de respuestas
    - Uso: Detalle de sesión, análisis de respuestas
+
+6. session_challenges (session_id, question_id):
+   - Mejora: 5-15x en queries de desafíos por sesión
+   - Uso: Obtener preguntas de una sesión específica
+
+7. session_scores (session_id, user_id):
+   - Mejora: 10-30x en queries de puntuaciones
+   - Uso: Rankings, historial de scores por usuario
 
 RECOMENDACIONES:
 
@@ -167,10 +185,10 @@ RECOMENDACIONES:
 -- ========================================
 
 -- Actualizar estadísticas de tablas
--- ANALYZE TABLE users, challenges, user_responses, intensive_sessions;
+-- ANALYZE TABLE users, questions, user_responses, intensive_sessions, intensive_responses, session_challenges, session_scores;
 
 -- Optimizar tablas (desfragmentar)
--- OPTIMIZE TABLE users, challenges, user_responses, intensive_sessions;
+-- OPTIMIZE TABLE users, questions, user_responses, intensive_sessions, intensive_responses, session_challenges, session_scores;
 
 -- Ver tamaño de índices
 -- SELECT 
