@@ -148,10 +148,10 @@ class TutorService {
     const sessionRepository = require("../repositories/sessionRepository");
 
     // 1. Obtener estadísticas de respuestas del usuario
-    const responseStats = await metricsRepository.getUserResponseStats(userId);
+    const responseStats = await metricsRepository.getUserResponseStats(userId, timeRange);
 
     // 2. Obtener estadísticas del modo intensivo
-    const intensiveStats = await metricsRepository.getIntensiveStats(userId);
+    const intensiveStats = await metricsRepository.getIntensiveStats(userId, timeRange);
 
     // 3. Obtener sesiones intensivas recientes
     const recentSessions = await sessionRepository.getRecentIntensiveSessions(userId, 5);
