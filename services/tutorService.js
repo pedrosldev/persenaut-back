@@ -1,4 +1,4 @@
-const groq = new (require("groq-sdk"))({ apiKey: process.env.GROQ_API_KEY });
+const { groq, MODELS, TEMPERATURE } = require("../config/groq");
 
 class TutorService {
   async generateTutorAdvice(userId, timeRange = "week") {
@@ -12,8 +12,8 @@ class TutorService {
       // 3️⃣ Enviar al modelo
       const completion = await groq.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
-        model: "openai/gpt-oss-120b",
-        temperature: 0.7,
+        model: MODELS.GPT_OSS,
+        temperature: TEMPERATURE.BALANCED,
         max_tokens: 800,
       });
 
