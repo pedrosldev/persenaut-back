@@ -6,7 +6,58 @@ require('dotenv').config();
 
 const router = express.Router();
 
-// Registro
+/**
+ * @swagger
+ * /auth/register:
+ *   post:
+ *     summary: Registrar un nuevo usuario
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - username
+ *               - email
+ *               - password
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: Nombre completo del usuario
+ *                 example: Juan Pérez
+ *               username:
+ *                 type: string
+ *                 description: Nombre de usuario único
+ *                 example: juanperez123
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Correo electrónico único
+ *                 example: juan@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: Contraseña (mínimo 6 caracteres)
+ *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Usuario registrado exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Usuario registrado correctamente
+ *       400:
+ *         $ref: '#/components/responses/ValidationError'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
 router.post('/register', async (req, res) => {
     const { name, username, email, password } = req.body;
 
@@ -31,6 +82,54 @@ router.post('/register', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Iniciar sesión
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 description: Correo electrónico del usuario
+ *                 example: juan@example.com
+ *               password:
+ *                 type: string
+ *                 format: password
+ *                 description: Contraseña del usuario
+ *                 example: password123
+ *     responses:
+ *       200:
+ *         description: Login exitoso (token enviado en cookie httpOnly)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Login correcto
+ *       401:
+ *         description: Credenciales inválidas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             example:
+ *               error: Credenciales inválidas
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
 // Login
 // router.post('/login', async (req, res) => {
 //     const { email, password } = req.body;
@@ -92,6 +191,27 @@ router.post('/login', async (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /auth/logout:
+ *   post:
+ *     summary: Cerrar sesión
+ *     tags: [Authentication]
+ *     description: Elimina la cookie de autenticación del usuario
+ *     responses:
+ *       200:
+ *         description: Sesión cerrada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Sesión cerrada correctamente
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
+ */
 // Logout (eliminar cookie)
 router.post('/logout', (req, res) => {
     try {
@@ -110,6 +230,43 @@ router.post('/logout', (req, res) => {
     }
 });
 
+/**
+ * @swagger
+ * /auth/check-auth:
+ *   get:
+ *     summary: Verificar autenticación
+ *     tags: [Authentication]
+ *     description: Verifica si el usuario tiene una sesión activa válida
+ *     responses:
+ *       200:
+ *         description: Estado de autenticación
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - type: object
+ *                   properties:
+ *                     isAuthenticated:
+ *                       type: boolean
+ *                       example: true
+ *                     user:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: integer
+ *                           example: 1
+ *                         name:
+ *                           type: string
+ *                           example: Juan Pérez
+ *                         username:
+ *                           type: string
+ *                           example: juanperez123
+ *                 - type: object
+ *                   properties:
+ *                     isAuthenticated:
+ *                       type: boolean
+ *                       example: false
+ */
 router.get('/check-auth', async (req, res) => {
     try {
        

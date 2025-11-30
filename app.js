@@ -16,9 +16,11 @@ console.log(`API Key: ${process.env.GROQ_API_KEY ? 'Configurada ✓' : 'No confi
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const swaggerUi = require('swagger-ui-express');
 
 // Configuraciones
 const corsOptions = require('./config/cors');
+const swaggerSpec = require('./config/swagger');
 
 // Rutas
 const authRoutes = require('./routes/auth');
@@ -46,6 +48,15 @@ const app = express();
 app.use(cookieParser());
 app.use(express.json());
 app.use(cors(corsOptions));
+
+// ========================================
+// DOCUMENTACIÓN API (Swagger)
+// ========================================
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Persenaut API Docs',
+  customfavIcon: '/favicon.ico'
+}));
 
 // ========================================
 // RUTAS DE LA API
@@ -87,6 +98,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, '127.0.0.1', () => {
   console.log(`\n🚀 Servidor Persenaut iniciado correctamente`);
   console.log(`📡 Escuchando en http://localhost:${PORT}`);
+  console.log(`📚 Documentación API disponible en http://localhost:${PORT}/api-docs`);
   console.log(`🌍 Entorno: ${process.env.NODE_ENV || 'development'}\n`);
   
   // Iniciar servicio de notificaciones programadas

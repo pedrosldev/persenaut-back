@@ -4,10 +4,15 @@ const challengeRepository = require('../repositories/challengeRepository');
 
 /**
  * Servicio para lógica de negocio de modo intensivo
+ * Gestiona la generación automática de desafíos y la selección de preguntas para sesiones intensivas
  */
 class IntensiveService {
   /**
-   * Genera retos automáticamente cuando no hay suficientes
+   * Genera retos automáticamente cuando no hay suficientes en la base de datos
+   * @param {number} userId - ID del usuario
+   * @param {string} theme - Tema para generar los desafíos
+   * @param {number} count - Número de desafíos a generar
+   * @returns {Promise<Array>} Array de desafíos generados con IDs asignados
    */
   async generateAutoChallenges(userId, theme, count) {
     const generatedChallenges = [];
@@ -63,7 +68,12 @@ class IntensiveService {
   }
 
   /**
-   * Obtiene retos para una sesión intensiva
+   * Obtiene retos para una sesión intensiva, generando automáticamente si es necesario
+   * @param {number} userId - ID del usuario
+   * @param {string} theme - Tema de la sesión
+   * @param {number} limit - Límite de retos a obtener
+   * @param {string} gameMode - Modo de juego ('normal', 'survival', 'time_attack')
+   * @returns {Promise<Array>} Array de desafíos para la sesión
    */
   async getChallengesForSession(userId, theme, limit, gameMode) {
     // Determinar límite según modo de juego
@@ -90,7 +100,11 @@ class IntensiveService {
   }
 
   /**
-   * Obtiene retos adicionales para modo supervivencia
+   * Obtiene retos adicionales para modo supervivencia, excluyendo los ya usados
+   * @param {number} userId - ID del usuario
+   * @param {string} theme - Tema de los desafíos
+   * @param {Array<number>} usedChallengeIds - IDs de desafíos ya utilizados
+   * @returns {Promise<Array>} Array de 5 desafíos adicionales
    */
   async getContinuationChallenges(userId, theme, usedChallengeIds) {
     const challenges = await challengeRepository.findByThemeExcludingIds(

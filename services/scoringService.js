@@ -2,7 +2,20 @@
 const pool = require("../config/db");
 const AchievementService = require("./achievementService");
 
+/**
+ * Servicio para cálculo de puntos y actualización de métricas de usuario
+ * Gestiona el sistema de puntuación basado en precisión, tiempo y modo de juego
+ */
 const ScoringService = {
+  /**
+   * Calcula los puntos ganados en una sesión basándose en múltiples factores
+   * @param {Object} sessionResults - Resultados de la sesión
+   * @param {number} sessionResults.correctAnswers - Número de respuestas correctas
+   * @param {number} sessionResults.accuracy - Precisión en porcentaje (0-100)
+   * @param {number} sessionResults.timeUsed - Tiempo usado en segundos
+   * @param {string} sessionResults.gameMode - Modo de juego ('normal', 'survival', 'timed')
+   * @returns {number} Puntos totales calculados
+   */
   calculatePoints: (sessionResults) => {
     const basePoints = (sessionResults.correctAnswers || 0) * 10;
     const accuracyBonus = (sessionResults.accuracy || 0) >= 80 ? 50 : 0;
@@ -14,6 +27,14 @@ const ScoringService = {
     return basePoints + accuracyBonus + timeBonus;
   },
 
+  /**
+   * Guarda el score de una sesión en la base de datos
+   * @param {number} userId - ID del usuario
+   * @param {number} sessionId - ID de la sesión
+   * @param {Object} sessionResults - Resultados de la sesión (accuracy, timeUsed, gameMode, theme)
+   * @param {number} points - Puntos calculados para la sesión
+   * @returns {Promise<void>}
+   */
   saveSessionScore: async (userId, sessionId, sessionResults, points) => {
     const connection = await pool.getConnection();
 
@@ -49,6 +70,14 @@ const ScoringService = {
     }
   },
 
+  /**
+   * Actualiza las métricas acumuladas del usuario
+   * @param {number} userId - ID del usuario
+   * @param {Object} sessionResults - Resultados de la sesión (correctAnswers, timeUsed, accuracy)
+   * @param {number} points - Puntos ganados en la sesión
+   * @param {Object} connection - Conexión de base de datos activa
+   * @returns {Promise<void>}
+   */
   updateUserMetrics: async (userId, sessionResults, points, connection) => {
     try {
       const safePoints = points || 0;

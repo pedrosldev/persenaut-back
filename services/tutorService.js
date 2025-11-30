@@ -1,6 +1,16 @@
 const { groq, MODELS, TEMPERATURE } = require("../config/groq");
 
+/**
+ * Servicio para generar recomendaciones personalizadas del tutor IA
+ * Analiza las métricas del usuario y proporciona consejos de estudio
+ */
 class TutorService {
+  /**
+   * Genera recomendaciones del tutor basadas en las métricas del usuario
+   * @param {number} userId - ID del usuario
+   * @param {string} timeRange - Rango temporal para análisis ('day', 'week', 'month')
+   * @returns {Promise<Object>} Objeto con análisis, recomendaciones, objetivos y mensaje motivacional
+   */
   async generateTutorAdvice(userId, timeRange = "week") {
     try {
       // 1️⃣ Obtener métricas
@@ -72,6 +82,11 @@ class TutorService {
     }
   }
 
+  /**
+   * Intenta extraer información estructurada de un JSON corrupto o mal formateado
+   * @param {string} rawText - Texto JSON corrupto desde el modelo de IA
+   * @returns {Object} Objeto con datos extraídos (analysis, strengths, weaknesses, recommendations)
+   */
   // Nuevo método para extraer datos de JSON corrupto
   extractFromCorruptedJSON(rawText) {
     const extracted = {
@@ -121,6 +136,11 @@ class TutorService {
     return extracted;
   }
 
+  /**
+   * Valida y completa la estructura del consejo del tutor con valores por defecto
+   * @param {Object} advice - Objeto de consejo potencialmente incompleto
+   * @returns {Object} Objeto de consejo validado y completo
+   */
   // Método para validar y completar la estructura
   validateAndCompleteAdvice(advice) {
     const defaultAdvice = this.getFallbackAdvice();
@@ -143,6 +163,12 @@ class TutorService {
     };
   }
 
+  /**
+   * Obtiene las métricas completas del usuario desde los repositorios
+   * @param {number} userId - ID del usuario
+   * @param {string} timeRange - Rango temporal ('day', 'week', 'month')
+   * @returns {Promise<Object>} Objeto con estadísticas de respuestas, sesiones intensivas y temas débiles
+   */
   async getUserMetrics(userId, timeRange) {
     const metricsRepository = require("../repositories/metricsRepository");
     const sessionRepository = require("../repositories/sessionRepository");
@@ -184,6 +210,11 @@ class TutorService {
     };
   }
 
+  /**
+   * Construye el prompt para el modelo de IA con las métricas del usuario
+   * @param {Object} metrics - Métricas del usuario (precisión, preguntas, temas débiles)
+   * @returns {string} Prompt formateado para el modelo de IA
+   */
   // ACTUALIZA buildTutorPrompt para incluir datos intensivos
   buildTutorPrompt(metrics) {
     return `
@@ -218,6 +249,12 @@ RESPONDE EXCLUSIVAMENTE CON ESTE FORMATO JSON:
 No incluyas ningún otro texto fuera del JSON.`;
   }
 
+  /**
+   * Parsea la respuesta del tutor desde el modelo de IA
+   * @param {string} response - Respuesta en texto del modelo
+   * @returns {Object} Objeto parseado o consejo fallback si hay error
+   * @deprecated Este método ya no se usa, parseado se realiza directamente en generateTutorAdvice
+   */
   //   buildTutorPrompt(metrics) {
   //     return `
   // Eres un tutor educativo inteligente. Analiza las siguientes métricas de aprendizaje del estudiante y proporciona:
@@ -257,6 +294,12 @@ No incluyas ningún otro texto fuera del JSON.`;
   // Sé específico, constructivo y motivador.`;
   //   }
 
+  /**
+   * Parsea la respuesta del tutor desde el modelo de IA
+   * @param {string} response - Respuesta en texto del modelo
+   * @returns {Object} Objeto parseado o consejo fallback si hay error
+   * @deprecated Este método ya no se usa, parseado se realiza directamente en generateTutorAdvice
+   */
   parseTutorResponse(response) {
     try {
       // Limpia el response si viene con markdown
@@ -269,6 +312,10 @@ No incluyas ningún otro texto fuera del JSON.`;
     }
   }
 
+  /**
+   * Proporciona un consejo genérico cuando no hay suficientes datos o hay un error
+   * @returns {Object} Consejo fallback con estructura completa
+   */
   getFallbackAdvice() {
     return {
       analysis:
