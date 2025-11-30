@@ -88,8 +88,9 @@ CREATE INDEX IF NOT EXISTS idx_intensive_responses_session_question ON intensive
 -- TABLA: user_metrics
 -- ========================================
 
--- Índice único para queries rápidas por usuario
-CREATE UNIQUE INDEX IF NOT EXISTS idx_user_metrics_user_id ON user_metrics(user_id);
+-- Índice para queries rápidas por usuario
+-- Nota: No se usa UNIQUE porque puede haber datos duplicados en producción
+CREATE INDEX IF NOT EXISTS idx_user_metrics_user_id ON user_metrics(user_id);
 
 -- ========================================
 -- TABLA: user_achievements
