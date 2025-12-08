@@ -1,4 +1,4 @@
-const { groq, MODELS, TEMPERATURE } = require('../config/groq');
+const { groq, MODELS, TEMPERATURE, ADVANCED_PARAMS } = require('../config/groq');
 const { generatePrompt, formatQuestion } = require('./promptService');
 const challengeRepository = require('../repositories/challengeRepository');
 
@@ -23,8 +23,12 @@ class IntensiveService {
 
         const completion = await groq.chat.completions.create({
           messages: [{ role: "user", content: prompt }],
-          model: MODELS.LLAMA,
-          temperature: TEMPERATURE.BALANCED,
+          model: MODELS.LLAMA_INSTANT, // Cambiado a Llama 3.1 8B Instant
+          temperature: TEMPERATURE.CREATIVE, // Mayor creatividad para evitar repeticiones
+          frequency_penalty: ADVANCED_PARAMS.frequency_penalty,
+          presence_penalty: ADVANCED_PARAMS.presence_penalty,
+          top_p: ADVANCED_PARAMS.top_p,
+          seed: ADVANCED_PARAMS.seed(),
           max_tokens: 500,
         });
 

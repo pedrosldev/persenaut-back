@@ -1,4 +1,4 @@
-const { groq, MODELS, TEMPERATURE } = require("../config/groq");
+const { groq, MODELS, TEMPERATURE, ADVANCED_PARAMS } = require("../config/groq");
 
 /**
  * Servicio para generar recomendaciones personalizadas del tutor IA
@@ -22,8 +22,8 @@ class TutorService {
       // 3️⃣ Enviar al modelo
       const completion = await groq.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
-        model: MODELS.GPT_OSS,
-        temperature: TEMPERATURE.BALANCED,
+        model: MODELS.LLAMA_INSTANT, // Cambiado a Llama 3.1 8B Instant
+        temperature: TEMPERATURE.BALANCED, // Mantener balanceado para tutor (necesita coherencia)
         max_tokens: 800,
       });
 
