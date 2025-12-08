@@ -55,6 +55,29 @@ class ChallengeRepository {
   }
 
   /**
+   * Obtiene las preguntas más recientes de un tema (para contexto negativo)
+   * @param {string} theme - Tema de las preguntas
+   * @param {number} limit - Número de preguntas a obtener
+   * @returns {Promise<Array>} Array de preguntas recientes
+   */
+  async getRecentQuestionsByTheme(theme, limit = 15) {
+    const connection = await pool.getConnection();
+    try {
+      const [questions] = await connection.execute(
+        `SELECT question
+         FROM questions 
+         WHERE theme LIKE ? 
+         ORDER BY created_at DESC 
+         LIMIT ?`,
+        [`%${theme}%`, limit]
+      );
+      return questions;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
    * Encuentra retos excluyendo IDs ya usados
    */
   async findByThemeExcludingIds(userId, theme, excludeIds = [], limit = 5) {
