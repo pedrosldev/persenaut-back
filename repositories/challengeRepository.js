@@ -175,9 +175,15 @@ class ChallengeRepository {
     const connection = await pool.getConnection();
     try {
       const [themes] = await connection.execute(
-        `SELECT DISTINCT theme FROM questions 
-         WHERE user_id = ? AND theme IS NOT NULL AND theme != ''`,
-        [userId]
+        `SELECT DISTINCT theme FROM (
+          SELECT DISTINCT theme FROM questions 
+          WHERE user_id = ? AND theme IS NOT NULL AND theme != ''
+          UNION
+          SELECT DISTINCT theme FROM intensive_sessions 
+          WHERE user_id = ? AND theme IS NOT NULL AND theme != ''
+        ) AS all_themes
+        ORDER BY theme`,
+        [userId, userId]
       );
       return themes.map((t) => t.theme);
     } finally {
