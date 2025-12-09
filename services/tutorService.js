@@ -1,7 +1,5 @@
 const { groq, MODELS, TEMPERATURE, ADVANCED_PARAMS } = require("../config/groq");
 
-console.log("🚀 TutorService cargado - Versión con análisis de temas fuertes/débiles");
-
 /**
  * Servicio para generar recomendaciones personalizadas del tutor IA
  * Analiza las métricas del usuario y proporciona consejos de estudio
@@ -17,19 +15,9 @@ class TutorService {
     try {
       // 1️⃣ Obtener métricas
       const userMetrics = await this.getUserMetrics(userId, timeRange);
-      
-      console.log("🔍 DEBUG Tutor Metrics:", {
-        totalQuestions: userMetrics.totalQuestions,
-        strongThemes: userMetrics.strongThemes?.length,
-        weakThemes: userMetrics.weakThemes?.length,
-        strongThemesData: userMetrics.strongThemes,
-        weakThemesData: userMetrics.weakThemes
-      });
 
       // 2️⃣ Construir prompt con las métricas
       const prompt = this.buildTutorPrompt(userMetrics);
-      
-      console.log("📝 DEBUG Tutor Prompt:", prompt.substring(0, 500));
 
       // 3️⃣ Enviar al modelo
       const completion = await groq.chat.completions.create({
@@ -40,11 +28,9 @@ class TutorService {
       });
 
       const rawText = completion.choices[0]?.message?.content?.trim();
-      
-      console.log("🤖 DEBUG Tutor Raw Response:", rawText?.substring(0, 300));
 
       if (!rawText) {
-        console.warn("⚠️ Tutor: respuesta vacía del modelo");
+        console.warn("Tutor: respuesta vacía del modelo");
         return this.getFallbackAdvice();
       }
 
@@ -72,11 +58,6 @@ class TutorService {
           .replace(/\"\s*\n\s*"/g, '",\n"'); // Missing commas in objects
 
         parsedAdvice = JSON.parse(cleaned);
-
-        console.log("✅ JSON parseado correctamente:", {
-          analysis: parsedAdvice.analysis?.substring(0, 50) + "...",
-          recommendations: parsedAdvice.recommendations?.length,
-        });
       } catch (parseError) {
         console.warn(
           "Tutor: no se pudo parsear JSON, intentando recuperación...",
@@ -89,17 +70,9 @@ class TutorService {
       }
 
       // 5️⃣ Validar y completar estructura
-      const finalAdvice = this.validateAndCompleteAdvice(parsedAdvice);
-      console.log("✅ DEBUG Tutor Final Advice:", {
-        hasAnalysis: !!finalAdvice.analysis,
-        strengthsCount: finalAdvice.strengths?.length,
-        weaknessesCount: finalAdvice.weaknesses?.length,
-        recommendationsCount: finalAdvice.recommendations?.length
-      });
-      return finalAdvice;
+      return this.validateAndCompleteAdvice(parsedAdvice);
     } catch (error) {
-      console.error("❌ Error generating tutor advice:", error);
-      console.error("Stack:", error.stack);
+      console.error("Error generating tutor advice:", error);
       return this.getFallbackAdvice();
     }
   }
@@ -205,8 +178,13 @@ class TutorService {
     const recentSessions = await sessionRepository.getRecentIntensiveSessions(userId, 5);
 
     // 4. Obtener temas con mayor dificultad Y fortalezas
-    const weakThemes = await metricsRepository.getWeakThemes(userId, 5);
-    const strongThemes = await metricsRepository.getStrongThemes(userId, 5);
+    const allWeakThemes = await metricsRepository.getWeakThemes(userId, 5);
+    const allStrongThemes = await metricsRepository.getStrongThemes(userId, 5);
+
+    // Filtrar para evitar que el mismo tema aparezca como fuerte Y débil
+    // Débiles: < 60%, Fuertes: >= 60%
+    const weakThemes = allWeakThemes.filter(t => parseFloat(t.success_rate) < 60);
+    const strongThemes = allStrongThemes.filter(t => parseFloat(t.success_rate) >= 60);
 
     // Calcular métricas agregadas (DIARIOS + INTENSIVOS)
     const totalQuestionsDaily = responseStats.reduce(
