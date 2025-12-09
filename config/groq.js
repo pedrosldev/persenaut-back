@@ -15,14 +15,14 @@ const MODELS = {
 const TEMPERATURE = {
   PRECISE: 0.3,
   BALANCED: 0.7,
-  CREATIVE: 1.3 // Aumentado para mayor diversidad con versión de pago
+  CREATIVE: 0.7 // Reducido a 0.7 (mismo que BALANCED) para evitar alucinaciones
 };
 
 // Configuraciones adicionales para versión de pago (reducir repeticiones)
 const ADVANCED_PARAMS = {
-  frequency_penalty: 1.5,  // Penaliza palabras/frases repetidas
-  presence_penalty: 1.2,   // Fuerza temas nuevos
-  top_p: 0.95,             // Nucleus sampling
+  frequency_penalty: 0.8,  // Reducido a 0.8 (1.5 era demasiado agresivo)
+  presence_penalty: 0.6,   // Reducido a 0.6 (1.2 forzaba demasiado)
+  top_p: 0.95,             // Nucleus sampling (mantener)
   seed: () => Math.floor(Math.random() * 1000000) // Seed aleatorio
 };
 

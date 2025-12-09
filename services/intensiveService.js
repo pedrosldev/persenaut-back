@@ -17,9 +17,13 @@ class IntensiveService {
   async generateAutoChallenges(userId, theme, count) {
     const generatedChallenges = [];
 
+    // 🔥 Obtener últimas 15 preguntas del tema para contexto negativo
+    const recentQuestions = await challengeRepository.getRecentQuestionsByTheme(theme, 15);
+    const previousQuestions = recentQuestions.map(q => q.question);
+
     for (let i = 0; i < count; i++) {
       try {
-        const prompt = generatePrompt(theme, "avanzado", []);
+        const prompt = generatePrompt(theme, "avanzado", previousQuestions);
 
         const completion = await groq.chat.completions.create({
           messages: [{ role: "user", content: prompt }],

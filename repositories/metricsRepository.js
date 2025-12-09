@@ -183,23 +183,88 @@ class MetricsRepository {
   /**
    * Obtiene temas con mayor dificultad para un usuario
    */
-  async getWeakThemes(userId) {
+  async getWeakThemes(userId, limit = 5) {
     const connection = await pool.getConnection();
     try {
       const [themes] = await connection.execute(
         `SELECT 
-          q.theme,
-          COUNT(*) as total_attempts,
-          SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
-          (SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) / COUNT(*)) * 100 as success_rate
-        FROM user_responses ur
-        JOIN questions q ON ur.question_id = q.id
-        WHERE ur.user_id = ?
-        GROUP BY q.theme
+          theme,
+          SUM(total_attempts) as total_attempts,
+          SUM(correct_attempts) as correct_attempts,
+          (SUM(correct_attempts) / SUM(total_attempts)) * 100 as success_rate
+        FROM (
+          -- Retos diarios
+          SELECT 
+            q.theme,
+            COUNT(*) as total_attempts,
+            SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts
+          FROM user_responses ur
+          JOIN questions q ON ur.question_id = q.id
+          WHERE ur.user_id = ?
+          GROUP BY q.theme
+          
+          UNION ALL
+          
+          -- Sesiones intensivas
+          SELECT 
+            theme,
+            total_questions as total_attempts,
+            correct_answers as correct_attempts
+          FROM intensive_sessions
+          WHERE user_id = ?
+        ) AS combined_stats
+        WHERE theme IS NOT NULL AND theme != ''
+        GROUP BY theme
         HAVING total_attempts >= 3
         ORDER BY success_rate ASC
-        LIMIT 5`,
-        [userId]
+        LIMIT ?`,
+        [userId, userId, limit]
+      );
+      return themes;
+    } finally {
+      connection.release();
+    }
+  }
+
+  /**
+   * Obtiene temas con mejor rendimiento (fortalezas)
+   */
+  async getStrongThemes(userId, limit = 5) {
+    const connection = await pool.getConnection();
+    try {
+      const [themes] = await connection.execute(
+        `SELECT 
+          theme,
+          SUM(total_attempts) as total_attempts,
+          SUM(correct_attempts) as correct_attempts,
+          (SUM(correct_attempts) / SUM(total_attempts)) * 100 as success_rate
+        FROM (
+          -- Retos diarios
+          SELECT 
+            q.theme,
+            COUNT(*) as total_attempts,
+            SUM(CASE WHEN ur.is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts
+          FROM user_responses ur
+          JOIN questions q ON ur.question_id = q.id
+          WHERE ur.user_id = ?
+          GROUP BY q.theme
+          
+          UNION ALL
+          
+          -- Sesiones intensivas
+          SELECT 
+            theme,
+            total_questions as total_attempts,
+            correct_answers as correct_attempts
+          FROM intensive_sessions
+          WHERE user_id = ?
+        ) AS combined_stats
+        WHERE theme IS NOT NULL AND theme != ''
+        GROUP BY theme
+        HAVING total_attempts >= 3
+        ORDER BY success_rate DESC
+        LIMIT ?`,
+        [userId, userId, limit]
       );
       return themes;
     } finally {

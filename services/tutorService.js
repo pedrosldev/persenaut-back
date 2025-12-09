@@ -58,11 +58,6 @@ class TutorService {
           .replace(/\"\s*\n\s*"/g, '",\n"'); // Missing commas in objects
 
         parsedAdvice = JSON.parse(cleaned);
-
-        console.log("✅ JSON parseado correctamente:", {
-          analysis: parsedAdvice.analysis?.substring(0, 50) + "...",
-          recommendations: parsedAdvice.recommendations?.length,
-        });
       } catch (parseError) {
         console.warn(
           "Tutor: no se pudo parsear JSON, intentando recuperación...",
@@ -182,19 +177,39 @@ class TutorService {
     // 3. Obtener sesiones intensivas recientes
     const recentSessions = await sessionRepository.getRecentIntensiveSessions(userId, 5);
 
-    // 4. Obtener temas con mayor dificultad
-    const weakThemes = await metricsRepository.getWeakThemes(userId, 5);
+    // 4. Obtener temas con mayor dificultad Y fortalezas
+    const allWeakThemes = await metricsRepository.getWeakThemes(userId, 5);
+    const allStrongThemes = await metricsRepository.getStrongThemes(userId, 5);
 
-    // Calcular métricas agregadas
-    const totalQuestions = responseStats.reduce(
+    // Filtrar para evitar que el mismo tema aparezca como fuerte Y débil
+    // Débiles: < 60%, Fuertes: >= 60%
+    const weakThemes = allWeakThemes.filter(t => parseFloat(t.success_rate) < 60);
+    const strongThemes = allStrongThemes.filter(t => parseFloat(t.success_rate) >= 60);
+
+    // Calcular métricas agregadas (DIARIOS + INTENSIVOS)
+    const totalQuestionsDaily = responseStats.reduce(
       (sum, stat) => sum + parseInt(stat.total_questions || 0),
       0
     );
 
-    const totalCorrect = responseStats.reduce(
+    const totalQuestionsIntensive = intensiveStats.reduce(
+      (sum, stat) => sum + parseInt(stat.total_questions || 0),
+      0
+    );
+
+    const totalQuestions = totalQuestionsDaily + totalQuestionsIntensive;
+
+    const totalCorrectDaily = responseStats.reduce(
       (sum, stat) => sum + parseInt(stat.correct_answers || 0),
       0
     );
+
+    const totalCorrectIntensive = intensiveStats.reduce(
+      (sum, stat) => sum + parseInt(stat.correct_answers || 0),
+      0
+    );
+
+    const totalCorrect = totalCorrectDaily + totalCorrectIntensive;
 
     const overallAccuracy =
       totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
@@ -204,8 +219,11 @@ class TutorService {
       intensiveStats,
       recentSessions,
       weakThemes,
+      strongThemes,
       timeRange,
       totalQuestions,
+      totalQuestionsDaily,
+      totalQuestionsIntensive,
       overallAccuracy,
     };
   }
@@ -223,11 +241,22 @@ IMPORTANTE: Devuelve SOLAMENTE un objeto JSON válido, sin texto adicional, sin 
 Eres un tutor educativo inteligente. Analiza las métricas y proporciona recomendaciones.
 
 MÉTRICAS:
-- Precisión: ${metrics.overallAccuracy?.toFixed(1) || 0}%
-- Total preguntas: ${metrics.totalQuestions || 0}
-- Temas débiles: ${
-      metrics.weakThemes?.map((t) => t.theme).join(", ") || "Ninguno"
-    }
+- Precisión general: ${metrics.overallAccuracy?.toFixed(1) || 0}%
+- Total preguntas respondidas: ${metrics.totalQuestions || 0}
+  · Retos diarios: ${metrics.totalQuestionsDaily || 0}
+  · Sesiones intensivas: ${metrics.totalQuestionsIntensive || 0}
+
+TEMAS FUERTES (mejor rendimiento):
+${metrics.strongThemes?.length > 0 
+  ? metrics.strongThemes.map(t => `- ${t.theme}: ${parseFloat(t.success_rate).toFixed(1)}% de aciertos (${t.total_attempts} intentos)`).join('\n')
+  : '- No hay suficientes datos'
+}
+
+TEMAS DÉBILES (necesitan refuerzo):
+${metrics.weakThemes?.length > 0 
+  ? metrics.weakThemes.map(t => `- ${t.theme}: ${parseFloat(t.success_rate).toFixed(1)}% de aciertos (${t.total_attempts} intentos)`).join('\n')
+  : '- No hay suficientes datos'
+}
 
 RESPONDE EXCLUSIVAMENTE CON ESTE FORMATO JSON:
 {

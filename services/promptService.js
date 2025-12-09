@@ -2,12 +2,15 @@
 const generatePrompt = (theme, level, previousQuestions = []) => {
   const avoidRepetition =
     previousQuestions.length > 0
-      ? `\n\nPREGUNTAS RECIENTES A EVITAR:\n${previousQuestions
-          .slice(-3)
+      ? `\n\nPREGUNTAS RECIENTES A EVITAR (NO REPITAS ESTAS NI HAGAS PARÁFRASIS):\n${previousQuestions
+          .slice(-15) // Aumentado de 3 a 15 con versión de pago
+          .map((q, i) => `${i + 1}. ${q}`)
           .join("\n")}\n`
       : "";
 
-  return `ERES UN EXAMINADOR PROFESIONAL. GENERA EXCLUSIVAMENTE PREGUNTAS TIPO TEST CON 4 OPCIONES (A-D) Y 1 RESPUESTA CORRECTA.
+  return `ERES UN EXAMINADOR PROFESIONAL RIGUROSO. GENERA EXCLUSIVAMENTE PREGUNTAS TIPO TEST CON 4 OPCIONES (A-D) Y 1 RESPUESTA CORRECTA.
+
+⚠️ ADVERTENCIA CRÍTICA: SOLO USA INFORMACIÓN 100% VERIFICABLE Y REAL. SI DUDAS DE ALGO, NO LO USES.
 
 TEMA: ${theme}
 NIVEL: ${level}
@@ -30,7 +33,23 @@ REGLAS ABSOLUTAS:
 3. ¡Solo 4 opciones exactamente!
 4. ¡No añadas explicaciones adicionales!
 5. ¡Mantén el formato línea por línea!
-6. Genera SOLO UNA PREGUNTA.`;
+6. Genera SOLO UNA PREGUNTA.
+
+⚠️ REGLAS ANTI-ALUCINACIÓN (OBLIGATORIAS):
+7. PROHIBIDO INVENTAR: No crees títulos de películas, nombres de personas, fechas o hechos que no existan.
+8. PELÍCULAS/LIBROS/OBRAS: Menciona ÚNICAMENTE títulos que existan realmente y sean verificables.
+9. SI TIENES DUDA: Si no estás 100% seguro de un dato, NO lo uses. Elige otro aspecto más conocido del tema.
+10. PRIORIZA CONOCIMIENTO POPULAR: Usa obras/hechos famosos y documentados del tema, no casos oscuros que podrías confundir.
+
+EJEMPLO CORRECTO para "Cine de terror clásico de la Universal":
+- Drácula (1931), Frankenstein (1931), La Momia (1932), El Hombre Lobo (1941)
+- Directores: James Whale, Tod Browning, Karl Freund
+- Actores: Bela Lugosi, Boris Karloff, Lon Chaney Jr.
+
+EJEMPLO INCORRECTO:
+- ❌ "La Casa de la Bruja" (no existe)
+- ❌ "El misterio de la cripta esmeralda" (no existe)
+- ❌ Cualquier título que no puedas verificar 100%`;
 };
 
 const formatQuestion = (rawText) => {
@@ -144,7 +163,8 @@ REGLAS ABSOLUTAS:
 3. ¡Siempre incluye "Respuesta correcta:"!
 4. ¡Las opciones incorrectas deben ser verosímiles pero definitivamente erróneas!
 5. ¡No añadas explicaciones, análisis ni múltiples preguntas!
-6. ¡La pregunta debe basarse directamente en el contenido de los apuntes!`;
+6. ¡La pregunta debe basarse directamente en el contenido de los apuntes!
+7. ⚠️ CRÍTICO: USA ÚNICAMENTE INFORMACIÓN PRESENTE EN LOS APUNTES. NO INVENTES datos externos.`;
 };
 
 module.exports = { generatePrompt, generatePromptFromNotes, formatQuestion };
