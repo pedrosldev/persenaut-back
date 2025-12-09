@@ -185,16 +185,30 @@ class TutorService {
     // 4. Obtener temas con mayor dificultad
     const weakThemes = await metricsRepository.getWeakThemes(userId, 5);
 
-    // Calcular métricas agregadas
-    const totalQuestions = responseStats.reduce(
+    // Calcular métricas agregadas (DIARIOS + INTENSIVOS)
+    const totalQuestionsDaily = responseStats.reduce(
       (sum, stat) => sum + parseInt(stat.total_questions || 0),
       0
     );
 
-    const totalCorrect = responseStats.reduce(
+    const totalQuestionsIntensive = intensiveStats.reduce(
+      (sum, stat) => sum + parseInt(stat.total_questions || 0),
+      0
+    );
+
+    const totalQuestions = totalQuestionsDaily + totalQuestionsIntensive;
+
+    const totalCorrectDaily = responseStats.reduce(
       (sum, stat) => sum + parseInt(stat.correct_answers || 0),
       0
     );
+
+    const totalCorrectIntensive = intensiveStats.reduce(
+      (sum, stat) => sum + parseInt(stat.correct_answers || 0),
+      0
+    );
+
+    const totalCorrect = totalCorrectDaily + totalCorrectIntensive;
 
     const overallAccuracy =
       totalQuestions > 0 ? (totalCorrect / totalQuestions) * 100 : 0;
@@ -206,6 +220,8 @@ class TutorService {
       weakThemes,
       timeRange,
       totalQuestions,
+      totalQuestionsDaily,
+      totalQuestionsIntensive,
       overallAccuracy,
     };
   }
@@ -223,8 +239,10 @@ IMPORTANTE: Devuelve SOLAMENTE un objeto JSON válido, sin texto adicional, sin 
 Eres un tutor educativo inteligente. Analiza las métricas y proporciona recomendaciones.
 
 MÉTRICAS:
-- Precisión: ${metrics.overallAccuracy?.toFixed(1) || 0}%
-- Total preguntas: ${metrics.totalQuestions || 0}
+- Precisión general: ${metrics.overallAccuracy?.toFixed(1) || 0}%
+- Total preguntas respondidas: ${metrics.totalQuestions || 0}
+  · Retos diarios: ${metrics.totalQuestionsDaily || 0}
+  · Sesiones intensivas: ${metrics.totalQuestionsIntensive || 0}
 - Temas débiles: ${
       metrics.weakThemes?.map((t) => t.theme).join(", ") || "Ninguno"
     }
