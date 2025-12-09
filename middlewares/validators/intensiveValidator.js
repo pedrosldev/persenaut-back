@@ -87,11 +87,20 @@ const validateSaveResults = [
     .withMessage("timeUsed debe ser un número entero positivo o cero"),
 
   body("theme")
-    .optional()
-    .isString()
-    .trim()
-    .isLength({ min: 2, max: 100 })
-    .withMessage("theme debe tener entre 2 y 100 caracteres"),
+    .optional({ nullable: true, checkFalsy: false })
+    .custom((value, { req }) => {
+      // Si el campo existe en el body y tiene valor
+      if (req.body.hasOwnProperty('theme') && value !== null && value !== undefined) {
+        if (typeof value !== 'string') {
+          throw new Error('theme debe ser un string');
+        }
+        const trimmed = value.trim();
+        if (trimmed.length < 2 || trimmed.length > 100) {
+          throw new Error('theme debe tener entre 2 y 100 caracteres');
+        }
+      }
+      return true;
+    }),
 
   handleValidationErrors,
 ];
