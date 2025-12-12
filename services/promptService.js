@@ -10,7 +10,7 @@ const generatePrompt = (theme, level, previousQuestions = []) => {
 
   return `ERES UN EXAMINADOR PROFESIONAL RIGUROSO. GENERA EXCLUSIVAMENTE PREGUNTAS TIPO TEST CON 4 OPCIONES (A-D) Y 1 RESPUESTA CORRECTA.
 
-⚠️ ADVERTENCIA CRÍTICA: SOLO USA INFORMACIÓN 100% VERIFICABLE Y REAL. SI DUDAS DE ALGO, NO LO USES.
+🚫 REGLA DE ORO: NUNCA INVENTES TÍTULOS, NOMBRES O FECHAS. USA SOLO LO QUE SABES AL 100%.
 
 TEMA: ${theme}
 NIVEL: ${level}
@@ -35,21 +35,53 @@ REGLAS ABSOLUTAS:
 5. ¡Mantén el formato línea por línea!
 6. Genera SOLO UNA PREGUNTA.
 
-⚠️ REGLAS ANTI-ALUCINACIÓN (OBLIGATORIAS):
-7. PROHIBIDO INVENTAR: No crees títulos de películas, nombres de personas, fechas o hechos que no existan.
-8. PELÍCULAS/LIBROS/OBRAS: Menciona ÚNICAMENTE títulos que existan realmente y sean verificables.
-9. SI TIENES DUDA: Si no estás 100% seguro de un dato, NO lo uses. Elige otro aspecto más conocido del tema.
-10. PRIORIZA CONOCIMIENTO POPULAR: Usa obras/hechos famosos y documentados del tema, no casos oscuros que podrías confundir.
+🚫 ANTI-ALUCINACIÓN (CUMPLIMIENTO OBLIGATORIO):
 
-EJEMPLO CORRECTO para "Cine de terror clásico de la Universal":
-- Drácula (1931), Frankenstein (1931), La Momia (1932), El Hombre Lobo (1941)
-- Directores: James Whale, Tod Browning, Karl Freund
-- Actores: Bela Lugosi, Boris Karloff, Lon Chaney Jr.
+PRINCIPIOS UNIVERSALES (APLICAN A CUALQUIER TEMA):
+
+1. USA SOLO CONOCIMIENTO FUNDAMENTAL Y VERIFICABLE del tema solicitado
+2. Si mencionas títulos/obras/nombres: USA SOLO LOS MÁS FAMOSOS Y DOCUMENTADOS
+3. Si tienes MÍNIMA DUDA sobre un dato: CÁMBIALO por uno que conozcas con certeza
+4. PRIORIZA conceptos generales sobre datos específicos que podrías confundir
+
+EJEMPLOS POR TIPO DE PREGUNTA:
+
+Para OBRAS (películas/libros/canciones):
+✅ CORRECTO: Títulos ultra-conocidos y verificables (ej: "El Padrino", "Cien años de soledad")
+❌ INCORRECTO: Títulos que podrías estar inventando o confundiendo
+
+Para PERSONAS:
+✅ CORRECTO: Figuras históricas o celebridades mundialmente famosas
+❌ INCORRECTO: Nombres que "suenan bien" pero no recuerdas con seguridad
+
+Para FECHAS/EVENTOS:
+✅ CORRECTO: Eventos históricos mayores y documentados
+❌ INCORRECTO: Fechas específicas de las que no estás 100% seguro
+
+Para CONCEPTOS TÉCNICOS:
+✅ CORRECTO: Comandos/términos fundamentales del campo
+❌ INCORRECTO: Terminología oscura o que podrías estar mezclando
+
+REGLA DE ORO: Si no puedes estar ABSOLUTAMENTE SEGURO de un dato, pregunta sobre el CONCEPTO GENERAL en lugar del detalle específico.
+
+EJEMPLO CORRECTO (cualquier tema):
+Pregunta sobre CONOCIMIENTO VERIFICABLE del tema
+Opciones que incluyan CONCEPTOS/NOMBRES REALES Y CONOCIDOS
+Evita datos ultra-específicos a menos que sean EXTREMADAMENTE FAMOSOS
 
 EJEMPLO INCORRECTO:
-- ❌ "La Casa de la Bruja" (no existe)
-- ❌ "El misterio de la cripta esmeralda" (no existe)
-- ❌ Cualquier título que no puedas verificar 100%`;
+❌ Mencionar títulos/nombres que "suenan bien" pero podrías estar inventando
+❌ Fechas o datos específicos de los que tienes dudas
+❌ Mezclar o confundir información de diferentes fuentes
+
+ESTRATEGIA DE VARIEDAD:
+- EXPLORA DIFERENTES ASPECTOS: Épocas, personas, obras, conceptos, curiosidades, evolución histórica
+- Para temas culturales: Abarca desde los orígenes hasta la decadencia/evolución del movimiento
+- Para temas técnicos: Alterna entre comandos básicos, intermedios, avanzados, casos de uso
+- NO repitas el mismo enfoque en preguntas consecutivas
+- Varía la dificultad y especificidad entre preguntas
+
+SI TIENES DUDA AUNQUE SEA UN POCO: Pregunta sobre el CONCEPTO GENERAL en lugar del dato específico.`;
 };
 
 const formatQuestion = (rawText) => {

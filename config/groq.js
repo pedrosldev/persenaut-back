@@ -5,24 +5,24 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Configuraciones de modelos predefinidos
 const MODELS = {
-  LLAMA_INSTANT: "llama-3.1-8b-instant", // Versión de pago - Rápido y económico
+  LLAMA_INSTANT: "llama-3.1-8b-instant", // Versión rápida - Para pruebas
+  LLAMA_70B: "llama-3.3-70b-versatile", // Versión potente - Menos alucinaciones
   GPT_OSS: "openai/gpt-oss-120b",
-  LLAMA: "llama-3.3-70b-versatile",
-  DEFAULT: "llama-3.1-8b-instant" // Cambiado a Llama 3.1 8B Instant
+  DEFAULT: "llama-3.3-70b-versatile" // Cambiado a 70B para mejor precisión
 };
 
 // Configuraciones de temperatura predefinidas
 const TEMPERATURE = {
-  PRECISE: 0.3,
-  BALANCED: 0.7,
-  CREATIVE: 0.7 // Reducido a 0.7 (mismo que BALANCED) para evitar alucinaciones
+  PRECISE: 0.1,   // Para temas técnicos - MUY determinista (anti-alucinación)
+  BALANCED: 0.3,  // Para temas generales - Equilibrio entre variedad y precisión
+  CREATIVE: 0.4   // Para temas culturales - Más variedad para explorar diferentes aspectos
 };
 
 // Configuraciones adicionales para versión de pago (reducir repeticiones)
 const ADVANCED_PARAMS = {
-  frequency_penalty: 0.8,  // Reducido a 0.8 (1.5 era demasiado agresivo)
-  presence_penalty: 0.6,   // Reducido a 0.6 (1.2 forzaba demasiado)
-  top_p: 0.95,             // Nucleus sampling (mantener)
+  frequency_penalty: 0.9,  // Balanceado para evitar repeticiones pero permitir variedad
+  presence_penalty: 0.6,   // Fomenta nuevos temas sin ser demasiado agresivo
+  top_p: 0.9,              // Nucleus sampling más estricto
   seed: () => Math.floor(Math.random() * 1000000) // Seed aleatorio
 };
 

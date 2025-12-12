@@ -1,5 +1,6 @@
 const { groq, MODELS, TEMPERATURE, ADVANCED_PARAMS } = require('../config/groq');
 const { generatePrompt, formatQuestion } = require('../services/promptService');
+const questionValidator = require('../services/questionValidator');
 const challengeRepository = require('../repositories/challengeRepository');
 const userRepository = require('../repositories/userRepository');
 
@@ -28,11 +29,15 @@ class ChallengeController {
       // 1. Generar el prompt usando el servicio del backend
       const prompt = generatePrompt(theme, level, previousQuestions);
 
-      // 2. Llamar a GROQ
+      // Determinar temperatura según el tema
+      const isTechnicalTheme = /linux|programación|ciencia|matemáticas|informática/i.test(theme);
+      const temperature = isTechnicalTheme ? TEMPERATURE.PRECISE : TEMPERATURE.BALANCED;
+
+      // 2. Llamar a GROQ con modelo 70B
       const completion = await groq.chat.completions.create({
         messages: [{ role: "user", content: prompt }],
-        model: MODELS.LLAMA_INSTANT, // Cambiado a Llama 3.1 8B Instant
-        temperature: TEMPERATURE.CREATIVE, // Mayor creatividad
+        model: MODELS.DEFAULT, // Ahora usa llama-3.3-70b-versatile
+        temperature: temperature, // Temperatura dinámica según tema
         frequency_penalty: ADVANCED_PARAMS.frequency_penalty,
         presence_penalty: ADVANCED_PARAMS.presence_penalty,
         top_p: ADVANCED_PARAMS.top_p,
@@ -49,7 +54,26 @@ class ChallengeController {
       // 3. Formatear la pregunta usando el servicio del backend
       const formattedQuestion = formatQuestion(responseText);
 
-      // 4. Guardar en la base de datos si hay userId
+      // 4. NUEVO: Validar la pregunta antes de guardarla
+      const validation = questionValidator.validate(formattedQuestion, theme);
+      
+      if (!validation.isValid) {
+        console.warn('⚠️ Pregunta inválida generada:', validation.errors);
+        return res.status(422).json({
+          success: false,
+          error: 'La pregunta generada no pasó la validación',
+          details: validation.errors,
+          warnings: validation.warnings,
+          rawResponse: responseText
+        });
+      }
+
+      // Log de advertencias si las hay
+      if (validation.warnings.length > 0) {
+        console.warn('⚠️ Advertencias en pregunta:', validation.warnings);
+      }
+
+      // 5. Guardar en la base de datos si hay userId
       if (userId) {
         const questionId = await challengeRepository.save({
           theme,
@@ -68,6 +92,12 @@ class ChallengeController {
         return res.json({
           success: true,
           question: formattedQuestion,
+          validation: {
+            score: validation.score,
+            warnings: validation.warnings
+          },
+          model: MODELS.DEFAULT,
+          temperature: temperature,
           rawResponse: responseText,
           promptUsed: prompt,
           savedQuestionId: questionId,
@@ -78,6 +108,12 @@ class ChallengeController {
         return res.json({
           success: true,
           question: formattedQuestion,
+          validation: {
+            score: validation.score,
+            warnings: validation.warnings
+          },
+          model: MODELS.DEFAULT,
+          temperature: temperature,
           rawResponse: responseText,
           promptUsed: prompt,
           message: "Pregunta generada correctamente",

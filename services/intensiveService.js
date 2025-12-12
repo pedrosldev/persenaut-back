@@ -17,18 +17,23 @@ class IntensiveService {
   async generateAutoChallenges(userId, theme, count) {
     const generatedChallenges = [];
 
-    // 🔥 Obtener últimas 15 preguntas del tema para contexto negativo
-    const recentQuestions = await challengeRepository.getRecentQuestionsByTheme(theme, 15);
+    // 🔥 Obtener últimas 20 preguntas del tema para contexto negativo
+    const recentQuestions = await challengeRepository.getRecentQuestionsByTheme(theme, 20);
     const previousQuestions = recentQuestions.map(q => q.question);
+
+    // Determinar temperatura según tema
+    const isTechnicalTheme = /linux|programación|ciencia|matemáticas|informática/i.test(theme);
+    const temperature = isTechnicalTheme ? TEMPERATURE.PRECISE : TEMPERATURE.BALANCED;
 
     for (let i = 0; i < count; i++) {
       try {
+        // Actualizar previousQuestions con las preguntas recién generadas
         const prompt = generatePrompt(theme, "avanzado", previousQuestions);
 
         const completion = await groq.chat.completions.create({
           messages: [{ role: "user", content: prompt }],
-          model: MODELS.LLAMA_INSTANT, // Cambiado a Llama 3.1 8B Instant
-          temperature: TEMPERATURE.CREATIVE, // Mayor creatividad para evitar repeticiones
+          model: MODELS.DEFAULT, // Usar modelo 70B
+          temperature: temperature, // Temperatura baja según tema
           frequency_penalty: ADVANCED_PARAMS.frequency_penalty,
           presence_penalty: ADVANCED_PARAMS.presence_penalty,
           top_p: ADVANCED_PARAMS.top_p,
@@ -64,6 +69,15 @@ class IntensiveService {
             correct_answer: formattedQuestion.correctAnswer,
             level: "avanzado",
           });
+
+          // ⚡ CRÍTICO: Agregar la pregunta recién generada a previousQuestions
+          // para evitar repeticiones en las siguientes iteraciones
+          previousQuestions.push(formattedQuestion.questionText);
+          
+          // Mantener solo las últimas 25 para no sobrecargar el prompt
+          if (previousQuestions.length > 25) {
+            previousQuestions.shift();
+          }
 
           console.log(`✅ Reto auto-generado ID: ${insertedId}`);
         }
